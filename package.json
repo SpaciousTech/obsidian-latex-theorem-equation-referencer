@@ -1,6 +1,6 @@
 {
-	"name": "obsidian-math-booster",
-	"version": "2.2.0",
+	"name": "obsidian-math-booster-mijnedit",
+	"version": "2.2.1",
 	"description": "An Obsidian.md plugin that provides a powerful indexing & referencing system for theorems & equations in your vault. Bring LaTeX-like workflow into Obsidian with theorem environments, automatic equation numbering, and more.",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

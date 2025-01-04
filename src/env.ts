@@ -13,6 +13,17 @@ export const THEOREM_LIKE_ENV_IDs = [
     "conjecture",
     "hypothesis",
     "remark",
+    "cause",
+    "effect",
+    "result",
+    "observation",
+    "conclusion",
+    "evidence",
+    "bylaw",
+    "principle",
+    "protocol",
+    "context",
+    "condition",
 ] as const;
 
 export const PROOF_LIKE_ENV_IDs = [
@@ -37,6 +48,17 @@ export const THEOREM_LIKE_ENV_PREFIXES = [
     "cnj",
     "hyp",
     "rmk",
+    "cse",
+    "eff",
+    "res",
+    "obs",
+    "cnl",
+    "evd",
+    "law",
+    "prn",
+    "prt",
+    "ctx",
+    "cnd",
 ] as const;
 
 export type TheoremLikeEnvID = typeof THEOREM_LIKE_ENV_IDs[number];
