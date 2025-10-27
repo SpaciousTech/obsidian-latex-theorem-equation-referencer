@@ -1,6 +1,6 @@
 import { App, ExtraButtonComponent, MarkdownPostProcessorContext, MarkdownRenderChild, MarkdownView, Notice, TFile, editorInfoField } from "obsidian";
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { TheoremCalloutModal } from 'settings/modals';
 import { TheoremCalloutSettings, TheoremCalloutPrivateFields } from 'settings/settings';
 import { generateTheoremCalloutFirstLine, isTheoremCallout, resolveSettings } from 'utils/plugin';
@@ -14,9 +14,10 @@ import { parseTheoremCalloutMetadata, readTheoremCalloutSettings } from 'utils/p
 import { THEOREM_LIKE_ENV_ID_PREFIX_MAP, THEOREM_LIKE_ENV_PREFIX_ID_MAP, TheoremLikeEnvID, TheoremLikeEnvPrefix } from 'env';
 import { getIO } from 'file-io';
 import { MutationObservingChild, getSectionCacheFromMouseEvent, getSectionCacheOfDOM, isPdfExport, resolveLinktext } from 'utils/obsidian';
+import { clearMathJaxTypeset } from "equations/common";
 
 
-export const createTheoremCalloutPostProcessor = (plugin: LatexReferencer) => async (element: HTMLElement, context: MarkdownPostProcessorContext) => {
+export const createTheoremCalloutPostProcessor = (plugin: CrossLinksPlugin) => async (element: HTMLElement, context: MarkdownPostProcessorContext) => {
     const file = plugin.app.vault.getAbstractFileByPath(context.sourcePath) ?? plugin.app.workspace.getActiveFile();
     if (!(file instanceof TFile)) return null;
 
@@ -81,7 +82,7 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
         containerEl: HTMLElement,
         public context: MarkdownPostProcessorContext,
         public file: TFile,
-        public plugin: LatexReferencer
+        public plugin: CrossLinksPlugin
     ) {
         super(containerEl);
         this.app = plugin.app;
@@ -106,9 +107,6 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
             }
         }));
 
-        // remove the edit button when this plugin gets disabled
-        this.plugin.addChild(this);
-        this.register(() => this.removeEditButton());
         // remove the edit button when the relevent setting is disabled
         this.registerEvent(this.plugin.indexManager.on('global-settings-updated', () => {
             if (this.plugin.extraSettings.showTheoremCalloutEditButton) {
@@ -117,6 +115,14 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
                 this.removeEditButton();
             }
         }));
+        
+        // Ensure cleanup on unload
+        this.register(() => {
+            this.removeEditButton();
+            if (this.observer) {
+                this.observer.unload();
+            }
+        });
     }
 
     getPage(): MarkdownPage | null {
@@ -344,6 +350,9 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
             return;
         }
 
+        // Clear MathJax tracking if replacing content that may contain math
+        clearMathJaxTypeset(titleInner);
+
         const titleElements: (HTMLElement | string)[] = [newMainTitleEl];
 
         if (info.theoremSubtitleEl) {
@@ -363,8 +372,10 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
         this.containerEl.classList.add("theorem-callout");
         const resolvedSettings = resolveSettings(undefined, this.plugin, this.file);
         const profile = this.plugin.extraSettings.profiles[resolvedSettings.profile];
-        for (const tag of profile.meta.tags) {
-            this.containerEl.classList.add("theorem-callout-" + tag);
+        if (profile) {
+            for (const tag of profile.meta.tags) {
+                this.containerEl.classList.add("theorem-callout-" + tag);
+            }
         }
         this.containerEl.classList.add("theorem-callout-" + info.theoremType);
         this.containerEl.toggleClass(`theorem-callout-${resolvedSettings.theoremCalloutStyle.toLowerCase()}`, resolvedSettings.theoremCalloutStyle != "Custom");

@@ -1,11 +1,12 @@
-import LatexReferencer from "main";
+import CrossLinksPlugin from "main";
 import { App, MarkdownPostProcessorContext, MarkdownRenderChild, TFile } from "obsidian";
 import { resolveSettings } from "utils/plugin";
 import { makeProofClasses, makeProofElement } from "./common";
 import { renderMarkdown } from "utils/render";
 import { Profile } from "settings/profile";
+import { clearMathJaxTypeset } from "equations/common";
 
-export const createProofProcessor = (plugin: LatexReferencer) => (element: HTMLElement, context: MarkdownPostProcessorContext) => {
+export const createProofProcessor = (plugin: CrossLinksPlugin) => (element: HTMLElement, context: MarkdownPostProcessorContext) => {
     if (!plugin.extraSettings.enableProof) return;
 
     const { app } = plugin;
@@ -51,7 +52,7 @@ function parseAtSignLink(codeEl: HTMLElement) {
 export class ProofRenderer extends MarkdownRenderChild {
     atSignParseResult: { atSign: ChildNode, links: HTMLElement[] } | undefined;
 
-    constructor(public app: App, public plugin: LatexReferencer, containerEl: HTMLElement, public which: "begin" | "end", public file: TFile, public display?: string) {
+    constructor(public app: App, public plugin: CrossLinksPlugin, containerEl: HTMLElement, public which: "begin" | "end", public file: TFile, public display?: string) {
         super(containerEl);
         this.atSignParseResult = parseAtSignLink(this.containerEl);
     }
@@ -75,6 +76,7 @@ export class ProofRenderer extends MarkdownRenderChild {
     update(): void {
         const settings = resolveSettings(undefined, this.plugin, this.file);
         const profile = this.plugin.extraSettings.profiles[settings.profile];
+        if (!profile) return;
 
         /**
          * `\begin{proof}`@[[<link to Theorem 1>]] => Proof of Theorem 1.
@@ -109,6 +111,9 @@ export class ProofRenderer extends MarkdownRenderChild {
         if (this.display) {
             const children = await renderMarkdown(this.display, this.file.path, this.plugin);
             if (children) {
+                // Clear MathJax tracking before replacing content that may contain math
+                clearMathJaxTypeset(this.containerEl);
+                
                 const el = createSpan({ cls: makeProofClasses(this.which, profile) });
                 el.replaceChildren(...children);
                 this.containerEl.replaceWith(el);
