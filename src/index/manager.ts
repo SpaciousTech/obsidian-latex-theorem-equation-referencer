@@ -5,9 +5,25 @@ import { MathImporter } from "./web-worker/importer";
 import { MathIndex } from "./math-index";
 import { ImportResult } from "./web-worker/message";
 import { MarkdownPage } from "./typings/markdown";
-import LatexReferencer from "../main";
+import CrossLinksPlugin from "../main";
 import { iterDescendantFiles } from "utils/obsidian";
 import * as MathLinks from "obsidian-mathlinks";
+
+// Helper function to safely call MathLinks.update
+function safeMathLinksUpdate(app: App, file?: TFile) {
+    try {
+        const mathLinksPlugin = app.plugins.getPlugin('mathlinks');
+        if (mathLinksPlugin) {
+            if (file) {
+                MathLinks.update(app, file);
+            } else {
+                MathLinks.update(app);
+            }
+        }
+    } catch (error) {
+        // MathLinks not available, silently continue
+    }
+}
 
 
 export class MathIndexManager extends Component {
@@ -31,7 +47,7 @@ export class MathIndexManager extends Component {
     initialized: boolean;
 
     constructor(
-        public plugin: LatexReferencer,
+        public plugin: CrossLinksPlugin,
         // public version: string, 
         public settings: ImporterSettings
     ) {
@@ -87,14 +103,21 @@ export class MathIndexManager extends Component {
                 iterDescendantFiles(file, (descendantFile) => {
                     if (descendantFile.extension === "md") {
                         this.index.updateNames(descendantFile);
-                        MathLinks.update(this.app, descendantFile);
-                    };
+                        safeMathLinksUpdate(this.app, descendantFile);
+                    }
                 });
             })
         );
 
         this.registerEvent(
             this.on("global-settings-updated", () => {
+                // Only re-index if already initialized (settings changed after initial load)
+                if (!this.initialized) {
+                    // If not initialized, let the normal initialization handle it
+                    return;
+                }
+                
+                console.log('Cross-Links: Settings changed, re-indexing vault...');
                 // re-index the whole vault
                 const init = new MathIndexInitializer(this);
                 init.finished().then(() => {
@@ -122,7 +145,7 @@ export class MathIndexManager extends Component {
             this.index.touch();
             this.trigger("update", this.revision);
             this.trigger("index-initialized");
-            MathLinks.update(this.app);
+            safeMathLinksUpdate(this.app);
         });
 
         this.addChild(init);
@@ -131,7 +154,10 @@ export class MathIndexManager extends Component {
     private async rename(file: TAbstractFile, oldPath: string) {
         if (!(file instanceof TFile)) return;
 
-        this.plugin.settings[file.path] = structuredClone(this.plugin.settings[oldPath]);
+        const oldSettings = this.plugin.settings[oldPath];
+        if (oldSettings) {
+            this.plugin.settings[file.path] = structuredClone(oldSettings);
+        }
         delete this.plugin.settings[oldPath];
         this.plugin.excludedFiles.remove(oldPath);
         this.plugin.excludedFiles.push(file.path);
@@ -142,41 +168,52 @@ export class MathIndexManager extends Component {
         this.index.delete(oldPath);
         await this.reload(file);
         this.index.updateNames(file);
-        MathLinks.update(this.app);
+        safeMathLinksUpdate(this.app);
     }
 
     /** Queue a file for reloading; this is done asynchronously in the background and may take a few seconds. */
     public async reload(file: TFile): Promise<MarkdownPage> {
-        const result = await this.importer.import<ImportResult>(file);
+        try {
+            const result = await this.importer.import<ImportResult>(file);
 
-        if (result.type === "error") {
-            throw new Error(`Failed to import file '${file.name}: ${result.$error}`);
-        } else if (result.type === "markdown") {
-            const parsed = MarkdownPage.from(result.result, (link) => {
-                const rpath = this.metadataCache.getFirstLinkpathDest(link.path, result.result.$path!);
-                if (rpath) return link.withPath(rpath.path);
-                else return link;
-            });
-
-            this.index.store(parsed, (object, store) => {
-                store(object.$sections, (section, store) => {
-                    store(section.$blocks);
+            if (result.type === "error") {
+                console.error(`Cross-Links: Failed to import file '${file.name}':`, result.$error);
+                throw new Error(`Failed to import file '${file.name}: ${result.$error}`);
+            } else if (result.type === "markdown") {
+                const parsed = MarkdownPage.from(result.result, (link) => {
+                    try {
+                        const rpath = this.metadataCache.getFirstLinkpathDest(link.path, result.result.$path!);
+                        if (rpath) return link.withPath(rpath.path);
+                        else return link;
+                    } catch (error) {
+                        console.error(`Cross-Links: Error resolving link ${link.path}:`, error);
+                        return link;
+                    }
                 });
-            });
 
-            this.trigger("update", this.revision);
-            this.trigger('index-updated', file);
-            return parsed;
+                this.index.store(parsed, (object, store) => {
+                    store(object.$sections, (section, store) => {
+                        store(section.$blocks);
+                    });
+                });
+
+                this.trigger("update", this.revision);
+                this.trigger('index-updated', file);
+                return parsed;
+            }
+
+            throw new Error("Encountered unrecognized import result type: " + (result as any).type);
+        } catch (error) {
+            console.error(`Cross-Links: Error reloading file ${file.path}:`, error);
+            throw error;
         }
-
-        throw new Error("Encountered unrecognized import result type: " + (result as any).type);
     }
 
     /** Given an array of TFiles, this function does two things:
      * 1. It reloads (re-imports) each file in the array.
      * 2. It re-computes the theorem/equation numbers for all the files containing blocks 
      *    that each file in the array previously linked to.
-     * 　　EDIT: Wow, I forgot to update the files that each file in the array newly links to.
+     *    EDIT: Wow, I forgot to update the files that each file in the array newly links to.
      * 
      * This should be named like updateOldAndNewLinkDestinations.
      */
@@ -217,7 +254,7 @@ export class MathIndexManager extends Component {
         // recompute theorem/equation numbers for the previously or currently linked files
         toBeUpdated.forEach((fileToBeUpdated) => {
             this.index.updateNames(fileToBeUpdated);
-            MathLinks.update(this.app, fileToBeUpdated);
+            safeMathLinksUpdate(this.app, fileToBeUpdated);
         });
         this.trigger("update", this.revision);
     }
@@ -249,7 +286,7 @@ export class MathIndexManager extends Component {
             this.index.updateNames(fileToBeUpdated);
         });
         this.trigger("update", this.revision);
-        MathLinks.update(this.app);
+        safeMathLinksUpdate(this.app);
     }
 
     // Event propogation.
@@ -296,7 +333,10 @@ export class MathIndexManager extends Component {
 /** Lifecycle-respecting file queue which will import files, reading them from the file cache if needed. */
 export class MathIndexInitializer extends Component {
     /** Number of concurrent operations the initializer will perform. */
-    static BATCH_SIZE: number = 8;
+    static BATCH_SIZE = 4; // Reduced from 8 to prevent freezing
+
+    /** Delay between batches in milliseconds to allow UI updates */
+    static BATCH_DELAY = 50;
 
     /** Whether the initializer should continue to run. */
     active: boolean;
@@ -318,12 +358,39 @@ export class MathIndexInitializer extends Component {
     imported: number;
     /** Total number of skipped files. */
     skipped: number;
+    /** Last time progress was updated */
+    private lastProgressUpdate = 0;
 
     constructor(public manager: MathIndexManager) {
         super();
 
         this.active = false;
-        this.queue = this.manager.vault.getMarkdownFiles();
+        // Prioritize currently open files and recently modified files
+        const allFiles = this.manager.vault.getMarkdownFiles();
+        const openFiles: TFile[] = [];
+        const recentFiles: TFile[] = [];
+        const otherFiles: TFile[] = [];
+        
+        const openFilePaths = new Set(
+            this.manager.app.workspace.getLeavesOfType('markdown')
+                .map(leaf => (leaf.view as any).file?.path)
+                .filter(Boolean)
+        );
+        
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        
+        for (const file of allFiles) {
+            if (openFilePaths.has(file.path)) {
+                openFiles.push(file);
+            } else if (file.stat.mtime > oneWeekAgo) {
+                recentFiles.push(file);
+            } else {
+                otherFiles.push(file);
+            }
+        }
+        
+        // Process open files first, then recent, then others
+        this.queue = [...openFiles, ...recentFiles, ...otherFiles].reverse();
         this.files = this.queue.length;
         this.start = Date.now();
         this.current = [];
@@ -353,10 +420,18 @@ export class MathIndexInitializer extends Component {
     }
 
     /** Poll for another task to execute from the queue. */
-    private runNext() {
+    private async runNext() {
         // Do nothing if max number of concurrent operations already running.
         if (!this.active || this.current.length >= MathIndexInitializer.BATCH_SIZE) {
             return;
+        }
+
+        // Show progress every 100ms
+        const now = Date.now();
+        if (now - this.lastProgressUpdate > 100) {
+            this.lastProgressUpdate = now;
+            const progress = Math.round((this.initialized / this.files) * 100);
+            console.log(`Cross-Links: Indexing progress: ${progress}% (${this.initialized}/${this.files})`);
         }
 
         // There is space available to execute another.
@@ -367,10 +442,16 @@ export class MathIndexInitializer extends Component {
                 .then((result) => this.handleResult(next, result))
                 .catch((result) => this.handleResult(next, result));
 
+            // Add small delay between tasks to prevent UI freezing
+            if (this.queue.length % MathIndexInitializer.BATCH_SIZE === 0) {
+                await new Promise(resolve => setTimeout(resolve, MathIndexInitializer.BATCH_DELAY));
+            }
+
             this.runNext();
         } else if (!next && this.current.length == 0) {
             this.active = false;
 
+            console.log('Cross-Links: Index initialization complete, updating names...');
             this.manager.vault.getMarkdownFiles().forEach((file) => this.manager.index.updateNames(file));
             MathLinks.update(this.manager.app);
 
@@ -402,10 +483,16 @@ export class MathIndexInitializer extends Component {
             const metadata = this.manager.metadataCache.getFileCache(file);
             if (!metadata) return { status: "skipped" };
 
+            // Check file size to avoid processing very large files that could freeze
+            if (file.stat.size > 1024 * 1024) { // 1MB limit
+                console.warn(`Cross-Links: Skipping large file ${file.path} (${(file.stat.size / 1024).toFixed(0)}KB)`);
+                return { status: "skipped" };
+            }
+
             await this.manager.reload(file);
             return { status: "imported" };
         } catch (ex) {
-            console.log(`${this.manager.plugin.manifest.name}: Failed to import file: `, ex);
+            console.error(`Cross-Links: Failed to import file ${file.path}:`, ex);
             return { status: "skipped" };
         }
     }

@@ -1,12 +1,12 @@
 import { CachedMetadata, Editor, MarkdownView, Pos, TFile } from "obsidian";
 
-import LatexReferencer from "./main";
+import CrossLinksPlugin from "./main";
 import { isEditingView, locToEditorPosition } from "utils/editor";
 import { insertAt, splitIntoLines } from "utils/general";
 
 
 export abstract class FileIO {
-    constructor(public plugin: LatexReferencer, public file: TFile) { }
+    constructor(public plugin: CrossLinksPlugin, public file: TFile) { }
     abstract setLine(lineNumber: number, text: string): Promise<void>;
     abstract setRange(position: Pos, text: string): Promise<void>;
     abstract insertLine(lineNumber: number, text: string): Promise<void>;
@@ -22,7 +22,7 @@ export class ActiveNoteIO extends FileIO {
      * (See https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines#Prefer+the+Editor+API+instead+of+%60Vault.modify%60)
      * @param editor 
      */
-    constructor(plugin: LatexReferencer, file: TFile, public editor: Editor) {
+    constructor(plugin: CrossLinksPlugin, file: TFile, public editor: Editor) {
         super(plugin, file);
     }
 
@@ -60,7 +60,7 @@ export class NonActiveNoteIO extends FileIO {
      * File IO for non-active (= currently not opened / currently opened but not focused) notes.
      * Uses the Vault interface instead of Editor.
      */
-    constructor(plugin: LatexReferencer, file: TFile) {
+    constructor(plugin: CrossLinksPlugin, file: TFile) {
         super(plugin, file);
     }
 
@@ -89,7 +89,7 @@ export class NonActiveNoteIO extends FileIO {
     async getLine(lineNumber: number): Promise<string> {
         const data = await this.plugin.app.vault.cachedRead(this.file);
         const lines = splitIntoLines(data);
-        return lines[lineNumber];
+        return lines[lineNumber] ?? '';
     }
 
     async getRange(position: Pos): Promise<string> {
@@ -103,7 +103,7 @@ export class NonActiveNoteIO extends FileIO {
  * Automatically judges which of ActiveNoteIO or NonActiveNoteIO
  * should be used for the given file.
  */
-export function getIO(plugin: LatexReferencer, file: TFile, activeMarkdownView?: MarkdownView | null) {
+export function getIO(plugin: CrossLinksPlugin, file: TFile, activeMarkdownView?: MarkdownView | null) {
     activeMarkdownView = activeMarkdownView ?? plugin.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeMarkdownView && activeMarkdownView.file == file && isEditingView(activeMarkdownView)) {
         return new ActiveNoteIO(plugin, file, activeMarkdownView.editor);

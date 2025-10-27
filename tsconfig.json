@@ -1,30 +1,27 @@
 {
-  "compilerOptions": {
-    "baseUrl": "./src",
-    "inlineSourceMap": true,
-    "inlineSources": true,
-    "module": "ESNext",
-    "target": "ES6",
-    "allowJs": true,
-    "noImplicitAny": true,
-    "moduleResolution": "node",
-    "importHelpers": true,
-    "isolatedModules": true,
-	"strictNullChecks": true,
-    "lib": [
-      "DOM",
-      "ES5",
-      "ES6",
-      "ES7",
-      "ES2021.String",
-      "DOM.Iterable",
-      "es2022"
-    ]
-  },
-  "include": [
-    "**/*.ts"
-  ],
-  "exclude": [
-    "src/legacy/*.ts",
-  ]
+	"compilerOptions": {
+		"baseUrl": "./src",
+		"inlineSourceMap": true,
+		"inlineSources": true,
+		"module": "ESNext",
+		"target": "ES2020",
+		"allowJs": true,
+		"noImplicitAny": true,
+		"moduleResolution": "node",
+		"importHelpers": true,
+		"isolatedModules": true,
+		"strict": true,
+		"strictNullChecks": true,
+		"noUncheckedIndexedAccess": true,
+		"lib": [
+			"DOM",
+			"ES2020",
+			"ES2021",
+			"ES2022",
+			"ES2021.String",
+			"DOM.Iterable"
+		]
+	},
+	"include": ["**/*.ts"],
+	"exclude": ["src/legacy/*.ts"]
 }

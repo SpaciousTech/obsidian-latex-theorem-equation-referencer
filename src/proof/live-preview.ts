@@ -4,7 +4,7 @@ import { Decoration, DecorationSet, EditorView, PluginValue, ViewPlugin, ViewUpd
 import { SyntaxNodeRef } from '@lezer/common';
 import { syntaxTree } from '@codemirror/language';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { nodeText, rangesHaveOverlap } from 'utils/editor';
 import { Profile } from 'settings/profile';
 import { renderMarkdown } from 'utils/render';
@@ -20,7 +20,7 @@ export const LINK_END = "formatting-link_formatting-link-end";
 abstract class ProofWidget extends WidgetType {
     containerEl: HTMLElement | null;
 
-    constructor(public plugin: LatexReferencer, public profile: Profile) {
+    constructor(public plugin: CrossLinksPlugin, public profile: Profile) {
         super();
         this.containerEl = null;
     }
@@ -42,10 +42,10 @@ abstract class ProofWidget extends WidgetType {
 }
 
 class BeginProofWidget extends ProofWidget {
-    containerEl: HTMLElement | null;
+    containerEl!: HTMLElement | null;
 
     constructor(
-        plugin: LatexReferencer, profile: Profile,
+        plugin: CrossLinksPlugin, profile: Profile,
         public display: string | null,
         public linktext: string | null,
         public sourcePath: string
@@ -71,7 +71,7 @@ class BeginProofWidget extends ProofWidget {
         return makeProofElement("begin", this.profile);
     }
 
-    static async renderDisplay(el: HTMLElement, display: string, sourcePath: string, plugin: LatexReferencer) {
+    static async renderDisplay(el: HTMLElement, display: string, sourcePath: string, plugin: CrossLinksPlugin) {
         const children = await renderMarkdown(display, sourcePath, plugin);
         if (children) {
             el.replaceChildren(...children);
@@ -81,7 +81,7 @@ class BeginProofWidget extends ProofWidget {
 
 
 class EndProofWidget extends ProofWidget {
-    containerEl: HTMLElement | null;
+    containerEl!: HTMLElement | null;
 
     initDOM(): HTMLElement {
         return makeProofElement("end", this.profile);
@@ -96,7 +96,7 @@ export interface ProofPosition {
 }
 
 
-export const createProofDecoration = (plugin: LatexReferencer) => ViewPlugin.fromClass(
+export const createProofDecoration = (plugin: CrossLinksPlugin) => ViewPlugin.fromClass(
     class implements PluginValue {
         decorations: DecorationSet;
 
@@ -124,6 +124,7 @@ export const createProofDecoration = (plugin: LatexReferencer) => ViewPlugin.fro
             const sourcePath = file?.path ?? "";
             const settings = resolveSettings(undefined, plugin, file ?? app.vault.getRoot());
             const profile = plugin.extraSettings.profiles[settings.profile];
+            if (!profile) return Decoration.none;
 
             const builder = new RangeSetBuilder<Decoration>();
 
@@ -149,7 +150,7 @@ export const createProofDecoration = (plugin: LatexReferencer) => ViewPlugin.fro
                                 display = null;
                             } else {
                                 const match = rest.match(/^\[(.*)\]$/);
-                                if (match) { // custom display text is given, e.g. "\begin{proof}[Solutions.]"
+                                if (match && match[1] !== undefined) { // custom display text is given, e.g. "\begin{proof}[Solutions.]"
                                     start = node.from - 1;
                                     end = node.to + 1; // 1 = "`".length
                                     display = match[1];
@@ -200,7 +201,7 @@ export const createProofDecoration = (plugin: LatexReferencer) => ViewPlugin.fro
     decorations: instance => instance.decorations
 });
 
-// export const proofFoldFactory = (plugin: LatexReferencer) => foldService.of((state: EditorState, lineStart: number, lineEnd: number) => {
+// export const proofFoldFactory = (plugin: CrossLinksPlugin) => foldService.of((state: EditorState, lineStart: number, lineEnd: number) => {
 //     const positions = state.field(plugin.proofPositionField);
 //     for (const pos of positions) {
 //         if (pos.begin && pos.end && lineStart <= pos.begin.from && pos.begin.to <= lineEnd) {

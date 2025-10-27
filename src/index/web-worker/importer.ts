@@ -1,7 +1,7 @@
 /** Controls and creates Dataview file importers, allowing for asynchronous loading and parsing of files. */
 
 import { Component, MetadataCache, TFile, Vault } from "obsidian";
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { Transferable } from "./transferable";
 import ImportWorker from "index/web-worker/importer.worker";
 import { ImportCommand } from "./message";
@@ -36,7 +36,7 @@ export class MathImporter extends Component {
     /** Throttle settings. */
     throttle: () => ImportThrottle;
 
-    public constructor(public plugin: LatexReferencer, public vault: Vault, public metadataCache: MetadataCache, throttle?: () => ImportThrottle) {
+    public constructor(public plugin: CrossLinksPlugin, public vault: Vault, public metadataCache: MetadataCache, throttle?: () => ImportThrottle) {
         super();
         this.workers = new Map();
         this.shutdown = false;
@@ -82,26 +82,50 @@ export class MathImporter extends Component {
         const [file, resolve, reject] = this.queue.shift()!;
 
         worker.active = [file, resolve, reject, Date.now()];
-        this.vault.cachedRead(file).then((c) =>
-            worker!.worker.postMessage(
-                Transferable.transferable({
-                    type: "markdown",
-                    path: file.path,
-                    contents: c,
-                    metadata: this.metadataCache.getFileCache(file),
-                    excludeExampleCallout: this.plugin.extraSettings.excludeExampleCallout,
-                } as ImportCommand)
-            )
-        );
+        this.vault.cachedRead(file)
+            .then((c) => {
+                try {
+                    worker.worker.postMessage(
+                        Transferable.transferable({
+                            type: "markdown",
+                            path: file.path,
+                            contents: c,
+                            metadata: this.metadataCache.getFileCache(file),
+                            excludeExampleCallout: this.plugin.extraSettings.excludeExampleCallout,
+                        } as ImportCommand)
+                    );
+                } catch (error) {
+                    console.error(`Cross-Links: Failed to post message to worker for ${file.path}:`, error);
+                    this.finish(worker, { $error: `Failed to send to worker: ${error}` });
+                }
+            })
+            .catch((error) => {
+                console.error(`Cross-Links: Failed to read file ${file.path}:`, error);
+                this.finish(worker, { $error: `Failed to read file: ${error}` });
+            });
     }
 
     /** Finish the parsing of a file, potentially queueing a new file. */
     private finish(worker: PoolWorker, data: any) {
-        let [file, resolve, reject] = worker.active!;
+        if (!worker.active) {
+            console.error("Cross-Links: Worker finished but no active task found");
+            return;
+        }
 
-        // Resolve promises to let users know this file has finished.
-        if ("$error" in data) reject(data["$error"]);
-        else resolve(data);
+        let [file, resolve, reject] = worker.active;
+
+        try {
+            // Resolve promises to let users know this file has finished.
+            if ("$error" in data) {
+                console.error(`Cross-Links: Failed to import ${file.path}:`, data["$error"]);
+                reject(data["$error"]);
+            } else {
+                resolve(data);
+            }
+        } catch (error) {
+            console.error(`Cross-Links: Error resolving worker result for ${file.path}:`, error);
+            reject(error);
+        }
 
         // Remove file from outstanding.
         this.outstanding.delete(file.path);
@@ -113,7 +137,7 @@ export class MathImporter extends Component {
             terminate(worker);
         } else {
             const now = Date.now();
-            const start = worker.active![3];
+            const start = worker.active[3];
             const throttle = Math.max(0.1, this.throttle().utilization) - 1.0;
             const delay = (now - start) * throttle;
 
@@ -125,7 +149,7 @@ export class MathImporter extends Component {
             } else {
                 worker.availableAt = now + delay;
 
-                // Note: I'm pretty sure this will garauntee that this executes AFTER delay milliseconds,
+                // Note: I'm pretty sure this will guarantee that this executes AFTER delay milliseconds,
                 // so this should be fine; if it's not, we'll have to swap to an external timeout loop
                 // which infinitely reschedules itself to the next available execution time.
                 setTimeout(this.schedule.bind(this), delay);
@@ -160,7 +184,24 @@ export class MathImporter extends Component {
             worker: new ImportWorker(),
         };
 
-        worker.worker.onmessage = (evt) => this.finish(worker, Transferable.value(evt.data));
+        worker.worker.onmessage = (evt) => {
+            try {
+                this.finish(worker, Transferable.value(evt.data));
+            } catch (error) {
+                console.error("Cross-Links: Error handling worker message:", error);
+                if (worker.active) {
+                    this.finish(worker, { $error: `Worker message error: ${error}` });
+                }
+            }
+        };
+
+        worker.worker.onerror = (evt) => {
+            console.error("Cross-Links: Worker error:", evt.message, evt.error);
+            if (worker.active) {
+                this.finish(worker, { $error: `Worker error: ${evt.message}` });
+            }
+        };
+
         return worker;
     }
 

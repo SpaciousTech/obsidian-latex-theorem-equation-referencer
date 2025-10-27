@@ -5,14 +5,14 @@
 import { EditorState, StateEffect } from '@codemirror/state';
 import { PluginValue, ViewPlugin, EditorView, ViewUpdate } from '@codemirror/view';
 import { EquationBlock, MarkdownBlock, MarkdownPage } from 'index/typings/markdown';
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { MarkdownView, TFile, editorInfoField, finishRenderMath } from 'obsidian';
 import { resolveSettings } from 'utils/plugin';
 import { replaceMathTag } from './common';
 import { DEFAULT_SETTINGS, MathContextSettings } from 'settings/settings';
 
 
-export function createEquationNumberPlugin(plugin: LatexReferencer) {
+export function createEquationNumberPlugin(plugin: CrossLinksPlugin) {
 
     const { app, indexManager: { index } } = plugin;
 

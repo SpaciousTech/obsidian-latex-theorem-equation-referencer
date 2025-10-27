@@ -1,6 +1,6 @@
 import { App, EditorSuggestContext, Instruction, Notice, Scope, SearchResult, TFile, finishRenderMath, prepareFuzzySearch, prepareSimpleSearch, renderMath, sortSearchResults } from 'obsidian';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { MathIndex } from 'index/math-index';
 import { EquationBlock, MarkdownBlock, MarkdownPage, MathBlock, TheoremCalloutBlock } from 'index/typings/markdown';
 import { getFileTitle } from 'index/utils/normalizers';
@@ -21,7 +21,7 @@ export type MathSearchCoreCreator = (parent: SuggestParent) => MathSearchCore;
 
 export interface SuggestParent {
     app: App;
-    plugin: LatexReferencer;
+    plugin: CrossLinksPlugin;
     scope: Scope;
     range: SearchRange;
     queryType: QueryType;
@@ -33,7 +33,7 @@ export interface SuggestParent {
 
 export abstract class MathSearchCore {
     app: App;
-    plugin: LatexReferencer;
+    plugin: CrossLinksPlugin;
     index: MathIndex;
     scope: Scope;
 

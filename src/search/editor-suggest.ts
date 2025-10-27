@@ -1,21 +1,21 @@
 import { Editor, EditorPosition, EditorSuggest, EditorSuggestContext, EditorSuggestTriggerInfo, Keymap, UserEvent } from "obsidian";
 
-import LatexReferencer from "main";
+import CrossLinksPlugin from "main";
 import { MathBlock } from "index/typings/markdown";
 import { MathSearchCore, SuggestParent, WholeVaultTheoremEquationSearchCore } from "./core";
 import { QueryType, SearchRange } from './core';
 
 
 export class LinkAutocomplete extends EditorSuggest<MathBlock> implements SuggestParent {
-    queryType: QueryType;
-    range: SearchRange;
-    core: MathSearchCore;
-    triggers: Map<string, { range: SearchRange, queryType: QueryType }>;
+    queryType!: QueryType;
+    range!: SearchRange;
+    core!: MathSearchCore;
+    triggers!: Map<string, { range: SearchRange, queryType: QueryType }>;
 
     /**
      * @param type The type of the block to search for. See: index/typings/markdown.ts
      */
-    constructor(public plugin: LatexReferencer) {
+    constructor(public plugin: CrossLinksPlugin) {
         super(plugin.app);
         this.setTriggers();
         this.core = new WholeVaultTheoremEquationSearchCore(this);
@@ -30,9 +30,11 @@ export class LinkAutocomplete extends EditorSuggest<MathBlock> implements Sugges
         return this.context;
     }
 
-    getSelectedItem() {
+    getSelectedItem(): MathBlock {
         // Reference: https://github.com/tadashi-aikawa/obsidian-various-complements-plugin/blob/be4a12c3f861c31f2be3c0f81809cfc5ab6bb5fd/src/ui/AutoCompleteSuggest.ts#L595-L619
-        return this.suggestions.values[this.suggestions.selectedItem];
+        const item = this.suggestions.values[this.suggestions.selectedItem];
+        if (!item) throw new Error('No item selected');
+        return item;
     }
 
     onTrigger(cursor: EditorPosition, editor: Editor): EditorSuggestTriggerInfo | null {

@@ -4,7 +4,7 @@
 
 import { App, MarkdownRenderChild, finishRenderMath, MarkdownPostProcessorContext, TFile, Notice } from "obsidian";
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { resolveSettings } from 'utils/plugin';
 import { EquationBlock, MarkdownPage } from "index/typings/markdown";
 import { MathIndex } from "index/math-index";
@@ -12,7 +12,7 @@ import { isPdfExport, resolveLinktext } from "utils/obsidian";
 import { replaceMathTag } from "./common";
 
 
-export const createEquationNumberProcessor = (plugin: LatexReferencer) => async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
+export const createEquationNumberProcessor = (plugin: CrossLinksPlugin) => async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
     if (isPdfExport(el)) preprocessForPdfExport(plugin, el, ctx);
 
     const sourceFile = plugin.app.vault.getAbstractFileByPath(ctx.sourcePath);
@@ -34,7 +34,7 @@ export const createEquationNumberProcessor = (plugin: LatexReferencer) => async 
  * so that EquationNumberRenderer can find the corresponding block from the index
  * without relying on the line number.
  */
-function preprocessForPdfExport(plugin: LatexReferencer, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
+function preprocessForPdfExport(plugin: CrossLinksPlugin, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
 
     try {
         const topLevelMathDivs = el.querySelectorAll<HTMLElement>(':scope > div.math.math-block > mjx-container.MathJax[display="true"]');
@@ -51,7 +51,7 @@ function preprocessForPdfExport(plugin: LatexReferencer, el: HTMLElement, ctx: M
                 if (!EquationBlock.isEquationBlock(block)) continue;
 
                 const div = topLevelMathDivs[equationIndex++];
-                if (block.$printName) div.setAttribute('data-equation-id', block.$id);
+                if (block.$printName && block.$id && div) div.setAttribute('data-equation-id', block.$id);
             }
         }
 
@@ -69,7 +69,7 @@ export class EquationNumberRenderer extends MarkdownRenderChild {
     app: App
     index: MathIndex;
 
-    constructor(containerEl: HTMLElement, public plugin: LatexReferencer, public file: TFile, public context: MarkdownPostProcessorContext) {
+    constructor(containerEl: HTMLElement, public plugin: CrossLinksPlugin, public file: TFile, public context: MarkdownPostProcessorContext) {
         // containerEl, currentEL are mjx-container.MathJax elements
         super(containerEl);
         this.app = plugin.app;

@@ -5,7 +5,7 @@ import { Indexable, LINKBEARING_TYPE, Linkable } from './typings/indexable';
 import { Link } from 'index/expression/literal';
 import { EquationBlock, MarkdownPage, TheoremCalloutBlock } from './typings/markdown';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { CONVERTER, formatTitle, formatTitleWithoutSubtitle, getEqNumberPrefix } from 'utils/format';
 import { resolveSettings } from 'utils/plugin';
 import { ResolvedMathSettings, TheoremRefFormat } from 'settings/settings';
@@ -41,7 +41,7 @@ export class MathIndex {
      */
     // private folder: FolderIndex; // irrelevant because we are not going to search/query
 
-    public constructor(public plugin: LatexReferencer, public vault: Vault, public metadataCache: MetadataCache,
+    public constructor(public plugin: CrossLinksPlugin, public vault: Vault, public metadataCache: MetadataCache,
         // public settings: Settings // irrelevant because we are not going to search/query
     ) {
         this.revision = 0;
@@ -312,7 +312,7 @@ export class MathIndex {
             }
         }
 
-        if (this.plugin.extraSettings.setOnlyTheoremAsMain && theorems.length == 1) {
+        if (this.plugin.extraSettings.setOnlyTheoremAsMain && theorems.length == 1 && theorems[0]) {
             theorems[0].$main = true;
             mainTheorem = theorems[0];
         }

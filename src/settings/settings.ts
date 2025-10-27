@@ -189,7 +189,7 @@ export type MathSettings = Partial<MathContextSettings> & TheoremCalloutSettings
 export type ResolvedMathSettings = Required<MathContextSettings> & TheoremCalloutSettings & TheoremCalloutPrivateFields;
 
 export const DEFAULT_SETTINGS: Required<MathContextSettings> = {
-    profile: Object.keys(DEFAULT_PROFILES)[0],
+    profile: Object.keys(DEFAULT_PROFILES)[0]!,
     titleSuffix: ".",
     inferNumberPrefix: true,
     inferNumberPrefixFromProperty: "",

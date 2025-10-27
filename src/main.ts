@@ -1,8 +1,7 @@
-import { MarkdownView, Plugin } from 'obsidian';
+import { MarkdownView, Plugin, TFile } from 'obsidian';
 import { StateField, Extension, RangeSet } from '@codemirror/state';
 
 import * as MathLinks from 'obsidian-mathlinks';
-import { registerQuickPreview } from 'obsidian-quick-preview';
 
 import { MathContextSettings, DEFAULT_SETTINGS, ExtraSettings, DEFAULT_EXTRA_SETTINGS, UNION_TYPE_MATH_CONTEXT_SETTING_KEYS, UNION_TYPE_EXTRA_SETTING_KEYS } from 'settings/settings';
 import { MathSettingTab } from "settings/tab";
@@ -15,7 +14,7 @@ import { createEquationNumberPlugin } from 'equations/live-preview';
 import { getMarkdownPreviewViewEl, getMarkdownSourceViewEl, isPluginOlderThan } from 'utils/obsidian';
 import { getProfile, staticifyEqNumber, insertDisplayMath, insertTheoremCallout, insertProof } from 'utils/plugin';
 import { MathIndexManager } from 'index/manager';
-import { DependencyNotificationModal, MigrationModal, PluginSplitNoticeModal, RenameNoticeModal } from 'notice';
+import { MigrationModal } from 'notice';
 import { LinkAutocomplete } from 'search/editor-suggest';
 import { MathSearchModal } from 'search/modal';
 import { TheoremCalloutInfo, createTheoremCalloutsField } from 'theorem-callouts/state-field';
@@ -24,23 +23,23 @@ import { patchPagePreview } from 'patches/page-preview';
 import { createProofDecoration } from 'proof/live-preview';
 import { createProofProcessor } from 'proof/reading-view';
 import { MathBlock } from 'index/typings/markdown';
+import { debounce } from 'utils/debounce';
 
 
 export const VAULT_ROOT = '/';
 
 
-export default class LatexReferencer extends Plugin {
-	settings: Record<string, Partial<MathContextSettings>>;
-	extraSettings: ExtraSettings;
-	excludedFiles: string[];
-	dependencies: Record<string, { id: string, name: string, version: string }> = {
-		"mathlinks": { id: "mathlinks", name: "MathLinks", version: "0.5.3" }
-	};
-	indexManager: MathIndexManager;
-	editorExtensions: Extension[];
-	theoremCalloutsField: StateField<RangeSet<TheoremCalloutInfo>>;
+export default class CrossLinksPlugin extends Plugin {
+	settings!: Record<string, Partial<MathContextSettings>>;
+	extraSettings!: ExtraSettings;
+	excludedFiles!: string[];
+	indexManager!: MathIndexManager;
+	editorExtensions!: Extension[];
+	theoremCalloutsField!: StateField<RangeSet<TheoremCalloutInfo>>;
 	// proofPositionField: StateField<ProofPosition[]>;
-	lastHoverLinktext: string | null;
+	lastHoverLinktext: string | null = null;
+	private filesNeedingRerender: Set<string> = new Set();
+	private debouncedForceRerender!: ReturnType<typeof debounce>;
 
 	async onload() {
 
@@ -54,39 +53,14 @@ export default class LatexReferencer extends Plugin {
 		await this.saveSettings();
 		this.addSettingTab(new MathSettingTab(this.app, this));
 
-		/** Dependencies check */
-
-		this.app.workspace.onLayoutReady(async () => {
-			const dependenciesOK = Object.keys(this.dependencies).every((id) => this.checkDependency(id));
-			const v1 = !first && ((version as string | undefined)?.startsWith("1.") ?? true);
-
-			if (v1 || version.localeCompare('2.2.0', undefined, { numeric: true }) < 0) {
-				new RenameNoticeModal(this).open();
-			}
-
-			if (v1 || version.localeCompare('2.3.0', undefined, { numeric: true }) < 0) {
-				new PluginSplitNoticeModal(this).open();
-			}
-
-			if (!dependenciesOK || v1) {
-				new DependencyNotificationModal(this, dependenciesOK, v1).open();
-			}
-		});
-
+		/** Initialize debounced rerender */
+		this.debouncedForceRerender = debounce(() => this.forceRerender(), 100);
 
 		/** Indexing */
 
 		this.addChild((this.indexManager = new MathIndexManager(this, this.extraSettings)));
-		this.app.workspace.onLayoutReady(async () => this.indexManager.initialize());
 		// @ts-ignore
-		(window['mathIndex'] = this.indexManager.index) && this.register(() => delete window['mathIndex'])
-
-		// wait until the layout is ready to ensure MathLinks has been loaded when calling addProvider()
-		this.app.workspace.onLayoutReady(() => {
-			this.addChild(
-				MathLinks.addProvider(this.app, (mathLinks) => new CleverefProvider(mathLinks, this))
-			);
-		});
+		(window['crossLinksIndex'] = this.indexManager.index) && this.register(() => delete window['crossLinksIndex'])
 
 
 		this.registerEvent(
@@ -112,16 +86,6 @@ export default class LatexReferencer extends Plugin {
 		);
 
 
-		/** Add profile's tags as CSS classes */
-
-		this.app.workspace.onLayoutReady(() => {
-			this.app.workspace.iterateRootLeaves((leaf) => {
-				if (leaf.view instanceof MarkdownView) {
-					this.setProfileTagAsCSSClass(leaf.view);
-				}
-			});
-		});
-
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", (leaf) => {
 				if (leaf?.view instanceof MarkdownView) {
@@ -143,16 +107,6 @@ export default class LatexReferencer extends Plugin {
 
 		/** Theorem/equation link autocompletion */
 		this.updateLinkAutocomplete();
-		this.app.workspace.onLayoutReady(() => patchLinkCompletion(this));
-		const itemNormalizer = (item: MathBlock) => {
-			return {
-				linktext: item.$file,
-				sourcePath: '',
-				line: item.$position.start,
-			};
-		};
-		registerQuickPreview(this.app, this, LinkAutocomplete, itemNormalizer);
-		registerQuickPreview(this.app, this, MathSearchModal, itemNormalizer);
 
 		/** Markdown post processors */
 
@@ -161,14 +115,46 @@ export default class LatexReferencer extends Plugin {
 
 		// equation numbers
 		this.registerMarkdownPostProcessor(createEquationNumberProcessor(this));
-		this.app.workspace.onLayoutReady(() => this.forceRerender());
 
 		// proof environments
 		this.registerMarkdownPostProcessor(createProofProcessor(this));
 
 		// patch hover page preview to display theorem numbers in it
 		this.lastHoverLinktext = null;
-		this.app.workspace.onLayoutReady(() => patchPagePreview(this));
+		
+		/** Consolidated onLayoutReady - runs all initialization that needs layout to be ready */
+		this.app.workspace.onLayoutReady(async () => {
+			// Initialize index manager
+			await this.indexManager.initialize();
+
+			// Add MathLinks provider (optional)
+			try {
+				const mathLinksPlugin = this.app.plugins.getPlugin('mathlinks');
+				if (mathLinksPlugin) {
+					this.addChild(
+						MathLinks.addProvider(this.app, (mathLinks) => new CleverefProvider(mathLinks, this))
+					);
+				}
+			} catch (error) {
+				console.warn('Cross-Links: MathLinks plugin not available, clever referencing disabled');
+			}
+
+			// Add profile's tags as CSS classes
+			this.app.workspace.iterateRootLeaves((leaf) => {
+				if (leaf.view instanceof MarkdownView) {
+					this.setProfileTagAsCSSClass(leaf.view);
+				}
+			});
+
+			// Patch link completion
+			patchLinkCompletion(this);
+
+			// Patch page preview
+			patchPagePreview(this);
+
+			// Force rerender after everything is ready
+			this.forceRerender();
+		});
 
 		/** File menu */
 
@@ -187,72 +173,93 @@ export default class LatexReferencer extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = { [VAULT_ROOT]: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) };
-		this.extraSettings = JSON.parse(JSON.stringify(DEFAULT_EXTRA_SETTINGS));
-		this.excludedFiles = [];
-		// this.projectManager = new ProjectManager(this);
+		try {
+			this.settings = { [VAULT_ROOT]: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)) };
+			this.extraSettings = JSON.parse(JSON.stringify(DEFAULT_EXTRA_SETTINGS));
+			this.excludedFiles = [];
 
-		const loadedData = await this.loadData();
-		if (loadedData) {
-			const { settings, extraSettings, excludedFiles,
-				// dumpedProjects 
-			} = loadedData;
-			for (const path in settings) {
-				if (path != VAULT_ROOT) {
-					this.settings[path] = {};
-				}
-				for (const _key in DEFAULT_SETTINGS) {
-					const key = _key as keyof MathContextSettings;
-					let val = settings[path][key];
-					if (val !== undefined) {
-						if (key in UNION_TYPE_MATH_CONTEXT_SETTING_KEYS) {
-							const allowableValues = UNION_TYPE_MATH_CONTEXT_SETTING_KEYS[key];
-							if (!(allowableValues?.includes(val))) {
-								// invalid value encountered, substitute the default value instead
-								val = DEFAULT_SETTINGS[key];
+			const loadedData = await this.loadData();
+			if (!loadedData) {
+				console.log("Cross-Links: No saved settings found, using defaults");
+				return;
+			}
+
+			// Validate loaded data structure
+			if (typeof loadedData !== 'object') {
+				console.error("Cross-Links: Invalid settings data format, using defaults");
+				return;
+			}
+
+			const { settings, extraSettings, excludedFiles } = loadedData;
+			
+			// Load context settings with validation
+			if (settings && typeof settings === 'object') {
+				for (const path in settings) {
+					if (path != VAULT_ROOT) {
+						this.settings[path] = {};
+					}
+					for (const _key in DEFAULT_SETTINGS) {
+						const key = _key as keyof MathContextSettings;
+						let val = settings[path]?.[key];
+						if (val !== undefined) {
+							if (key in UNION_TYPE_MATH_CONTEXT_SETTING_KEYS) {
+								const allowableValues = UNION_TYPE_MATH_CONTEXT_SETTING_KEYS[key];
+								if (!(allowableValues?.includes(val))) {
+									// invalid value encountered, substitute the default value instead
+									val = DEFAULT_SETTINGS[key];
+									console.warn(`Cross-Links: Invalid value for ${key}, using default`);
+								}
+							}
+							if (typeof val == typeof DEFAULT_SETTINGS[key]) {
+								// @ts-ignore
+								this.settings[path][key] = val;
 							}
 						}
-						if (typeof val == typeof DEFAULT_SETTINGS[key]) {
-							// @ts-ignore
-							this.settings[path][key] = val;
+					}
+				}
+			}
+
+			// Load extra settings with validation
+			if (extraSettings && typeof extraSettings === 'object') {
+				for (const _key in DEFAULT_EXTRA_SETTINGS) {
+					const key = _key as keyof ExtraSettings;
+					let val = extraSettings[key];
+					if (val !== undefined) {
+						if (key in UNION_TYPE_EXTRA_SETTING_KEYS) {
+							const allowableValues = UNION_TYPE_EXTRA_SETTING_KEYS[key];
+							if (!(allowableValues?.includes(val))) {
+								val = DEFAULT_EXTRA_SETTINGS[key];
+								console.warn(`Cross-Links: Invalid value for ${key}, using default`);
+							}
+						}
+						if (typeof val == typeof DEFAULT_EXTRA_SETTINGS[key]) {
+							(this.extraSettings[key] as ExtraSettings[keyof ExtraSettings]) = val;
 						}
 					}
 				}
 			}
 
-			for (const _key in DEFAULT_EXTRA_SETTINGS) {
-				const key = _key as keyof ExtraSettings;
-				let val = extraSettings[key];
-				if (val !== undefined) {
-					if (key in UNION_TYPE_EXTRA_SETTING_KEYS) {
-						const allowableValues = UNION_TYPE_EXTRA_SETTING_KEYS[key];
-						if (!(allowableValues?.includes(val))) {
-							val = DEFAULT_EXTRA_SETTINGS[key];
-						}
-					}
-					if (typeof val == typeof DEFAULT_EXTRA_SETTINGS[key]) {
-						(this.extraSettings[key] as ExtraSettings[keyof ExtraSettings]) = val;
-					}
-				}
+			// Load excluded files
+			if (Array.isArray(excludedFiles)) {
+				this.excludedFiles = excludedFiles;
 			}
-
-			this.excludedFiles = excludedFiles;
-
-			// At the time the plugin is loaded, the data vault is not ready and 
-			// vault.getAbstractFile() returns null for any path.
-			// So we have to wait for the vault to start up and store a dumped version of the projects until then.
-			// this.projectManager = new ProjectManager(this, dumpedProjects);
+		} catch (error) {
+			console.error("Cross-Links: Error loading settings, using defaults:", error);
+			// Settings already initialized with defaults above
 		}
 	}
 
 	async saveSettings() {
-		await this.saveData({
-			version: this.manifest.version,
-			settings: this.settings,
-			extraSettings: this.extraSettings,
-			excludedFiles: this.excludedFiles,
-			// dumpedProjects: this.projectManager.dump(),
-		});
+		try {
+			await this.saveData({
+				version: this.manifest.version,
+				settings: this.settings,
+				extraSettings: this.extraSettings,
+				excludedFiles: this.excludedFiles,
+			});
+		} catch (error) {
+			console.error("Cross-Links: Error saving settings:", error);
+		}
 	}
 
 	updateLinkAutocomplete() {
@@ -265,33 +272,19 @@ export default class LatexReferencer extends Plugin {
 		this.registerEditorSuggest(new LinkAutocomplete(this));
 	}
 
-	/**
-	 * Return true if the required plugin with the specified id is enabled and its version matches the requriement.
-	 * @param id 
-	 * @returns 
-	 */
-	checkDependency(id: string): boolean {
-		if (!this.app.plugins.enabledPlugins.has(id)) {
-			return false;
-		}
-		const depPlugin = this.app.plugins.getPlugin(id);
-		if (depPlugin) {
-			return !isPluginOlderThan(depPlugin, this.dependencies[id].version)
-		}
-		return false;
-	}
-
 	setProfileTagAsCSSClass(view: MarkdownView) {
 		if (!view.file) return;
 		const profile = getProfile(this, view.file);
+		if (!profile) return;
 		const classes = [
-			...profile.meta.tags.map((tag) => `math-booster-${tag}`), // deprecated
-			...profile.meta.tags.map((tag) => `latex-referencer-${tag}`),
+			...profile.meta.tags.map((tag) => `math-booster-${tag}`), // legacy support
+			...profile.meta.tags.map((tag) => `latex-referencer-${tag}`), // legacy support
+			...profile.meta.tags.map((tag) => `cross-links-${tag}`),
 		];
 		for (const el of [getMarkdownSourceViewEl(view), getMarkdownPreviewViewEl(view)]) {
 			if (el) {
 				el.classList.forEach((cls) => {
-					if (cls.startsWith("math-booster-") || cls.startsWith("latex-referencer-")) {
+					if (cls.startsWith("math-booster-") || cls.startsWith("latex-referencer-") || cls.startsWith("cross-links-")) {
 						el.classList.remove(cls);
 					}
 				});
@@ -391,14 +384,57 @@ export default class LatexReferencer extends Plugin {
 		});
 	}
 
-	forceRerender() {
-		setTimeout(async () => {
+	/**
+	 * Optimized force rerender that only re-renders leaves with math content
+	 * or specific files that need updating
+	 */
+	forceRerender(specificFiles?: Set<string>) {
+		try {
+			// If we have specific files needing rerender, use those
+			const filesToRerender = specificFiles || this.filesNeedingRerender;
+			
+			// If no specific files and no files marked for rerender, skip
+			if (filesToRerender.size === 0) {
+				return;
+			}
+
 			for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
 				const view = leaf.view as MarkdownView;
+				
+				// Skip if no file
+				if (!view.file) continue;
+
+				// Only rerender files that are marked for rerender or specifically requested
+				if (!filesToRerender.has(view.file.path)) {
+					continue;
+				}
+
+				// Rerender the preview mode
 				const state = view.getEphemeralState();
 				view.previewMode.rerender(true);
 				view.setEphemeralState(state);
 			}
-		}, 800);
+
+			// Clear the files needing rerender set
+			this.filesNeedingRerender.clear();
+		} catch (error) {
+			console.error("Cross-Links: Error in forceRerender:", error);
+		}
+	}
+
+	/**
+	 * Mark a file as needing rerender and trigger debounced rerender
+	 */
+	markForRerender(file: TFile) {
+		this.filesNeedingRerender.add(file.path);
+		this.debouncedForceRerender();
+	}
+
+	onunload() {
+		// Clean up debounced function to prevent memory leaks
+		if (this.debouncedForceRerender) {
+			this.debouncedForceRerender.cancel();
+		}
+		super.onunload();
 	}
 }

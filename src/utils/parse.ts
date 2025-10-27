@@ -82,7 +82,7 @@ export function _readTheoremCalloutSettings(callout: {type: string, metadata: st
 
 
 export function trimMathText(text: string) {
-    return text.match(/\$\$([\s\S]*)\$\$/)?.[1].trim() ?? text;
+    return text.match(/\$\$([\s\S]*)\$\$/)?.[1]?.trim() ?? text;
 }
 
 export function parseLatexComment(line: string): { nonComment: string, comment: string } {
@@ -99,9 +99,11 @@ export function parseMarkdownComment(markdown: string): string[] {
     const pattern = /%%([\s\S]*?)%%/g;
     let result;
     while (result = pattern.exec(markdown)) {
-        for (let line of result[1].split('\n')) {
-            line = line.trim();
-            if (line) comments.push(line);
+        if (result[1]) {
+            for (let line of result[1].split('\n')) {
+                line = line.trim();
+                if (line) comments.push(line);
+            }
         }
     }
     return comments;
@@ -110,6 +112,6 @@ export function parseMarkdownComment(markdown: string): string[] {
 /** Parse an one-line YAML-like string into a key-value pair. */
 export function parseYamlLike(line: string): Record<string, string | undefined> | null {
     const result = line.match(/^(?<key>.*?):(?<value>.*)$/)?.groups;
-    if (!result) return null;
+    if (!result || !result.key || !result.value) return null;
     return { [result.key.trim()]: result.value.trim() };
 }

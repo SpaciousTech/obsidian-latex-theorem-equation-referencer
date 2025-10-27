@@ -20,6 +20,6 @@ onmessage = (event) => {
             postMessage({ $error: "Unsupported import method." });
         }
     } catch (error) {
-        postMessage({ $error: error.message });
+        postMessage({ $error: error instanceof Error ? error.message : String(error) });
     }
 };

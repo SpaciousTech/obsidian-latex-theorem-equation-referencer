@@ -1,6 +1,6 @@
 import { App, TFile } from "obsidian";
 
-import LatexReferencer from "main";
+import CrossLinksPlugin from "main";
 import { getPropertyOrLinkTextInProperty } from "utils/obsidian";
 import { DEFAULT_SETTINGS, MathContextSettings, NumberStyle, ResolvedMathSettings } from "settings/settings";
 import { THEOREM_LIKE_ENVs, TheoremLikeEnvID } from "env";
@@ -44,12 +44,13 @@ export const CONVERTER = {
     "Roman": toRomanUpper,
 }
 
-export function formatTheoremCalloutType(plugin: LatexReferencer, settings: { type: string, profile: string }): string {
+export function formatTheoremCalloutType(plugin: CrossLinksPlugin, settings: { type: string, profile: string }): string {
     const profile = plugin.extraSettings.profiles[settings.profile];
+    if (!profile) return settings.type;
     return profile.body.theorem[settings.type as TheoremLikeEnvID];
 }
 
-export function formatTitleWithoutSubtitle(plugin: LatexReferencer, file: TFile, settings: ResolvedMathSettings): string {
+export function formatTitleWithoutSubtitle(plugin: CrossLinksPlugin, file: TFile, settings: ResolvedMathSettings): string {
     let title = formatTheoremCalloutType(plugin, settings);
 
     if (settings.number) {
@@ -67,7 +68,7 @@ export function formatTitleWithoutSubtitle(plugin: LatexReferencer, file: TFile,
     return title;
 }
 
-export function formatTitle(plugin: LatexReferencer, file: TFile, settings: ResolvedMathSettings, noTitleSuffix: boolean = false): string {
+export function formatTitle(plugin: CrossLinksPlugin, file: TFile, settings: ResolvedMathSettings, noTitleSuffix: boolean = false): string {
     let title = formatTitleWithoutSubtitle(plugin, file, settings);
     return addSubTitle(title, settings, noTitleSuffix);
 }
@@ -86,7 +87,7 @@ export function addSubTitle(mainTitle: string, settings: ResolvedMathSettings, n
 export function inferNumberPrefix(source: string, regExp: string): string | undefined {
     const pattern = new RegExp(regExp);
     const match = source.match(pattern);
-    if (match) {
+    if (match && match[0]) {
         let prefix = match[0].trim();
         if (!prefix.endsWith('.')) prefix += '.';
         return prefix;

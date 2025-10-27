@@ -1,7 +1,11 @@
 import { EditorState, ChangeSet, RangeValue, RangeSet, SelectionRange } from '@codemirror/state';
 import { SyntaxNodeRef } from '@lezer/common';
-import { MathInfoSet } from 'render-math-in-callouts';
 import { EditorPosition, Loc, MarkdownView, editorLivePreviewField } from "obsidian";
+
+// Local type definition for debugging
+interface MathInfoSet {
+    between(from: number, to: number, callback: (from: number, to: number, value: any) => void): void;
+}
 
 export function locToEditorPosition(loc: Loc): EditorPosition {
     return { ch: loc.col, line: loc.line };

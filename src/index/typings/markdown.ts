@@ -43,13 +43,13 @@ export class MarkdownPage implements File, Linkbearing, Indexable {
     }
 
     /** The path this file exists at. */
-    $path: string;
+    $path!: string;
     /** The extension; for markdown files, almost always '.md'. */
-    $extension: string;
+    $extension!: string;
     /** The full extent of the file (start 0, end the number of lines in the file.) */
-    $position: LineSpan;
+    $position!: LineSpan;
     /** All links in the file. */
-    $links: Link[];
+    $links!: Link[];
     /**
      * All child markdown sections of this markdown file. The initial section before any content is special and is
      * named with the title of the file.
@@ -59,7 +59,7 @@ export class MarkdownPage implements File, Linkbearing, Indexable {
     /**
      * Maps a block ID to the corresponding markdown block in this page.
      */
-    $blocks: Map<string, MarkdownBlock>;
+    $blocks!: Map<string, MarkdownBlock>;
 
     /** $refName of the main theorem callout, if any. */
     $refName?: string
@@ -140,23 +140,23 @@ export class MarkdownSection implements Indexable, Linkable, Linkbearing {
     /** Path of the file that this section is in. */
     $types: string[] = MarkdownSection.TYPES;
     $typename: string = "Section";
-    $id: string;
-    $file: string;
+    $id!: string;
+    $file!: string;
 
     /** The index of this section in the file. */
-    $ordinal: number;
+    $ordinal!: number;
     /** The title of the section; the root (implicit) section will have the title of the page. */
-    $title: string;
+    $title!: string;
     /** The indentation level of the section (1 - 6). */
-    $level: number;
+    $level!: number;
     /** The span of lines indicating the position of the section. */
-    $position: LineSpan;
+    $position!: LineSpan;
     /** All tags on the file. */
-    $tags: string[];
+    $tags!: string[];
     /** All links in the file. */
-    $links: Link[];
+    $links!: Link[];
     /** All of the markdown blocks in this section. */
-    $blocks: MarkdownBlock[];
+    $blocks!: MarkdownBlock[];
 
     /** Convert raw markdown section data to the appropriate class. */
     static from(raw: JsonMarkdownSection, file: string, normalizer: LinkNormalizer = NOOP_NORMALIZER): MarkdownSection {
@@ -221,20 +221,20 @@ export class MarkdownBlock implements Indexable, Linkbearing {
 
     $types: string[] = MarkdownBlock.TYPES;
     $typename: string = "Block";
-    $id: string;
-    $file: string;
+    $id!: string;
+    $file!: string;
 
     /** The index of this block in the file. */
-    $ordinal: number;
+    $ordinal!: number;
     /** The position/extent of the block. */
-    $position: LineSpan;
-    $pos: Pos;
+    $position!: LineSpan;
+    $pos!: Pos;
     /** All links in the file. */
-    $links: Link[];
+    $links!: Link[];
     /** If present, the distinct block ID for this block. */
     $blockId?: string;
     /** The type of block - paragraph, list, and so on. */
-    $type: string;
+    $type!: string;
 
     static from(object: JsonMarkdownBlock, file: string, normalizer: LinkNormalizer = NOOP_NORMALIZER): MarkdownBlock {
         if (object.$type === "theorem") {
@@ -291,7 +291,7 @@ export abstract class MathBlock extends MarkdownBlock {
     // only set after backlinks are ready
     abstract $printName: string | null;
     // declaring as abstract to treat like an interface
-    $refName: string | null;
+    $refName!: string | null;
 
     /** Additional metadata specified via comments */
     $label?: string;
@@ -312,15 +312,15 @@ export class TheoremCalloutBlock extends MathBlock implements Linkbearing {
     $type: string = "theorem";
 
     /** True if written in the version-1 format of '> [!math|{"type":"theorem",...}]"' */
-    $v1: boolean;
+    $v1!: boolean;
 
     /** The settings for this theorem callout. */
-    $settings: MinimalTheoremCalloutSettings;
+    $settings!: MinimalTheoremCalloutSettings;
 
-    $titleSuffix: string;
+    $titleSuffix!: string;
 
     /** e.g. Theorem 1.1 (Cauchy-Schwarz) -> "Theorem 1.1" */
-    $theoremMainTitle: string;
+    $theoremMainTitle!: string;
 
     /** e.g. Theorem 1.1 (Cauchy-Schwarz) -> "theorem" */
     get $theoremType(): string {
@@ -342,7 +342,7 @@ export class TheoremCalloutBlock extends MathBlock implements Linkbearing {
     }
 
     /** Additional metadata specified via comments */
-    $main: boolean;
+    $main!: boolean;
 
     static from(
         object: JsonTheoremCalloutBlock,
@@ -398,8 +398,8 @@ export class EquationBlock extends MathBlock {
 
     $printName: string | null = null;
     /** The math text of this equation. */
-    $mathText: string;
-    $manualTag: string | null;
+    $mathText!: string;
+    $manualTag!: string | null;
 
     static from(
         object: JsonEquationBlock,

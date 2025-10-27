@@ -1,10 +1,10 @@
 import { PluginValue, EditorView, ViewUpdate, ViewPlugin } from '@codemirror/view';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { MathIndex } from 'index/math-index';
 
 
-export const createTheoremCalloutNumberingViewPlugin = (plugin: LatexReferencer) => ViewPlugin.fromClass(
+export const createTheoremCalloutNumberingViewPlugin = (plugin: CrossLinksPlugin) => ViewPlugin.fromClass(
     class implements PluginValue {
         index: MathIndex = plugin.indexManager.index;
 

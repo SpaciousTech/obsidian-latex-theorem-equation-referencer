@@ -1,7 +1,6 @@
 import { Link } from "index/expression/link";
 import { getFileTitle } from "index/utils/normalizers";
 import { CachedMetadata, SectionCache } from "obsidian";
-import BTree from "sorted-btree";
 import {
     JsonMarkdownBlock,
     JsonMarkdownPage,
@@ -12,6 +11,40 @@ import {
 import { MinimalTheoremCalloutSettings } from "settings/settings";
 import { parseMarkdownComment, parseYamlLike, readTheoremCalloutSettings, trimMathText } from "utils/parse";
 import { parseLatexComment } from "utils/parse";
+
+/**
+ * Helper function to find the next higher key in a sorted Map
+ * Replaces BTree's getPairOrNextHigher functionality
+ */
+function findNextHigherEntry<V>(
+    map: Map<number, V>,
+    key: number
+): [number, V] | undefined {
+    const sortedKeys = Array.from(map.keys()).sort((a, b) => a - b);
+    for (const k of sortedKeys) {
+        if (k >= key) {
+            return [k, map.get(k)!];
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Helper function to find the next lower or equal key in a sorted Map
+ * Replaces BTree's getPairOrNextLower functionality
+ */
+function findNextLowerEntry<V>(
+    map: Map<number, V>,
+    key: number
+): [number, V] | undefined {
+    const sortedKeys = Array.from(map.keys()).sort((a, b) => b - a); // descending order
+    for (const k of sortedKeys) {
+        if (k <= key) {
+            return [k, map.get(k)!];
+        }
+    }
+    return undefined;
+}
 
 
 /**
@@ -35,17 +68,19 @@ export function markdownImport(
     const metaheadings = metadata.headings ?? [];
     metaheadings.sort((a, b) => a.position.start.line - b.position.start.line);
 
-    const sections = new BTree<number, JsonMarkdownSection>(undefined, (a, b) => a - b);
+    const sections = new Map<number, JsonMarkdownSection>();
     for (let index = 0; index < metaheadings.length; index++) {
         const section = metaheadings[index];
+        if (!section) continue;
         const start = section.position.start.line;
+        const nextSection = metaheadings[index + 1];
         const end =
-            index == metaheadings.length - 1 ? lines.length - 1 : metaheadings[index + 1].position.start.line - 1;
+            index == metaheadings.length - 1 ? lines.length - 1 : (nextSection?.position.start.line ?? lines.length) - 1;
 
         sections.set(start, {
             $ordinal: index + 1,
-            $title: section.heading,
-            $level: section.level,
+            $title: section.heading ?? '',
+            $level: section.level ?? 1,
             $position: { start, end },
             $blocks: [],
             $links: [],
@@ -54,7 +89,7 @@ export function markdownImport(
 
     // Add an implicit section for the "heading" section of the page if there is not an immediate header but there is
     // some content in the file. If there are other sections, then go up to that, otherwise, go for the entire file.
-    const firstSection: [number, JsonMarkdownSection] | undefined = sections.getPairOrNextHigher(0);
+    const firstSection: [number, JsonMarkdownSection] | undefined = findNextHigherEntry(sections, 0);
     if ((!firstSection && !empty) || (firstSection && !emptylines(lines, 0, firstSection[1].$position.start))) {
         const end = firstSection ? firstSection[1].$position.start - 1 : lines.length;
         sections.set(0, {
@@ -73,7 +108,7 @@ export function markdownImport(
 
     // All blocks; we will assign tags and other metadata to blocks as we encounter them. At the end, only blocks that
     // have actual metadata will be stored to save on memory pressure.
-    const blocks = new BTree<number, JsonMarkdownBlock>(undefined, (a, b) => a - b);
+    const blocks = new Map<number, JsonMarkdownBlock>();
     let blockOrdinal = 1;
     for (const block of metadata.sections || []) {
         // Skip headings blocks, we handle them specially as sections.
@@ -85,9 +120,12 @@ export function markdownImport(
         let theoremCalloutSettings: MinimalTheoremCalloutSettings | null = null;
         let v1 = false;
         if (block.type === "callout") {
-            const settings = readTheoremCalloutSettings(lines[start], excludeExample);
-            theoremCalloutSettings = settings ?? null;
-            v1 = !!(settings?.legacy);
+            const line = lines[start];
+            if (line) {
+                const settings = readTheoremCalloutSettings(line, excludeExample);
+                theoremCalloutSettings = settings ?? null;
+                v1 = !!(settings?.legacy);
+            }
         }
 
         if (block.type === "math") {
@@ -157,7 +195,7 @@ export function markdownImport(
 
     // Add blocks to sections.
     for (const block of blocks.values() as Iterable<JsonMarkdownBlock>) {
-        const section = sections.getPairOrNextLower(block.$position.start);
+        const section = findNextLowerEntry(sections, block.$position.start);
 
         if (section && section[1].$position.end >= block.$position.end) {
             section[1].$blocks.push(block);
@@ -174,13 +212,13 @@ export function markdownImport(
         const line = linkdef.position.start.line;
         addLink(links, link);
 
-        const section = sections.getPairOrNextLower(line);
+        const section = findNextLowerEntry(sections, line);
         if (section && section[1].$position.end >= line) addLink(section[1].$links, link);
 
-        const block = blocks.getPairOrNextLower(line);
+        const block = findNextLowerEntry(blocks, line);
         if (block && block[1].$position.end >= line) addLink(block[1].$links, link);
 
-        const listItem = blocks.getPairOrNextHigher(line);
+        const listItem = findNextHigherEntry(blocks, line);
         if (listItem && listItem[1].$position.end >= line) addLink(listItem[1].$links, link);
     }
 
@@ -197,7 +235,7 @@ export function markdownImport(
     return {
         $path: path,
         $links: links,
-        $sections: sections.valuesArray(),
+        $sections: Array.from(sections.values()),
         $extension: "md",
         $position: { start: 0, end: lines.length },
     };
@@ -206,7 +244,7 @@ export function markdownImport(
 /** Check if the given line range is all empty. Start is inclusive, end exclusive. */
 function emptylines(lines: string[], start: number, end: number): boolean {
     for (let index = start; index < end; index++) {
-        if (lines[index].trim() !== "") return false;
+        if (lines[index]?.trim() !== "") return false;
     }
 
     return true;

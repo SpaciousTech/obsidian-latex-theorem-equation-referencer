@@ -12,6 +12,7 @@ export function renderTextWithMath(source: string): (HTMLElement | string)[] {
     let textTo = 0;
     while ((result = mathPattern.exec(source)) !== null) {
         const mathString = result[1];
+        if (!mathString) continue;
         textTo = result.index;
         if (textTo > textFrom) {
             elements.push(source.slice(textFrom, textTo));

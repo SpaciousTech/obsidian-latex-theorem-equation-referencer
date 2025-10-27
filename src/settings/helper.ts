@@ -1,6 +1,6 @@
-import { ButtonComponent, Setting, SliderComponent, TAbstractFile, TFile, TFolder, TextComponent, ToggleComponent, MarkdownRenderer, Component } from 'obsidian';
+import { ButtonComponent, Setting, SliderComponent, TAbstractFile, TFile, TFolder, TextComponent, ToggleComponent, Component } from 'obsidian';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { THEOREM_LIKE_ENV_IDs, THEOREM_LIKE_ENVs, TheoremLikeEnvID } from 'env';
 import { DEFAULT_SETTINGS, ExtraSettings, LEAF_OPTIONS, THEOREM_REF_FORMATS, THEOREM_CALLOUT_STYLES, TheoremCalloutSettings, MathContextSettings, NUMBER_STYLES, FoldOption, DEFAULT_EXTRA_SETTINGS } from 'settings/settings';
 import { formatTheoremCalloutType } from 'utils/format';
@@ -13,7 +13,7 @@ export class TheoremCalloutSettingsHelper {
         public contentEl: HTMLElement,
         public settings: TheoremCalloutSettings,
         public defaultSettings: Required<MathContextSettings> & Partial<TheoremCalloutSettings>,
-        public plugin: LatexReferencer,
+        public plugin: CrossLinksPlugin,
         public file: TFile,
     ) { }
 
@@ -121,7 +121,7 @@ export abstract class SettingsHelper<SettingsType = MathContextSettings | ExtraS
         public contentEl: HTMLElement,
         public settings: Partial<SettingsType>,
         public defaultSettings: Required<SettingsType>,
-        public plugin: LatexReferencer,
+        public plugin: CrossLinksPlugin,
         public allowUnset: boolean,
         public addClear: boolean,
     ) {
@@ -263,7 +263,7 @@ export class MathContextSettingsHelper extends SettingsHelper<MathContextSetting
         contentEl: HTMLElement,
         settings: Partial<MathContextSettings>,
         defaultSettings: Required<MathContextSettings>,
-        plugin: LatexReferencer,
+        plugin: CrossLinksPlugin,
         public file: TAbstractFile,
     ) {
         const isRoot = file instanceof TFolder && file.isRoot();
@@ -335,10 +335,6 @@ export class MathContextSettingsHelper extends SettingsHelper<MathContextSetting
         this.addTextSetting("endProof", "End of a proof");
 
         this.addHeading('Search & link auto-completion - general')
-            .then(async (setting) => {
-                setting.descEl.addClass('math-booster-new-feature');
-                await MarkdownRenderer.render(this.plugin.app, '**NOTE:** If you have the [**Quick Preview**](https://github.com/RyotaUshio/obsidian-quick-preview) plugin installed, holding down `Alt`/`Option` _(by default)_ will trigger a quick preview of the selected suggestion with the context around it.', setting.descEl, '', this);
-            })
         this.addToggleSetting("insertSpace", "Append whitespace after inserted link");
     }
 
@@ -367,7 +363,7 @@ export class ExtraSettingsHelper extends SettingsHelper<ExtraSettings> {
         this.addToggleSetting("showTheoremCalloutEditButton", "Show an edit button on a theorem callout");
         this.addToggleSetting("setOnlyTheoremAsMain", "If a note has only one theorem callout, automatically set it as main", 'Regardless of this setting, putting "%% main %%" or "%% main: true %%" in a theorem callout will set it as main one of the note, which means any link to that note will be displayed with the theorem\'s title. Enabling this option implicitly sets a theorem callout as main when it\'s the only one in the note.');
         this.addToggleSetting("setLabelInModal", "Show LaTeX/Pandoc label input form in theorem callout insert/edit modal");
-        this.addToggleSetting("enableProof", "Enable proof environment", `For example, you can replace a pair of inline codes \`${DEFAULT_SETTINGS.beginProof}\` & \`${DEFAULT_SETTINGS.endProof}\` with \"${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.begin}\" & \"${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.end}\". You can style it with CSS snippets. See the documentation for the details.`, () => this.plugin.updateEditorExtensions());
+        this.addToggleSetting("enableProof", "Enable proof environment", `For example, you can replace a pair of inline codes \`${DEFAULT_SETTINGS.beginProof}\` & \`${DEFAULT_SETTINGS.endProof}\` with \"${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile]?.body.proof.begin ?? 'Proof.'}\" & \"${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile]?.body.proof.end ?? '◾'}\". You can style it with CSS snippets. See the documentation for the details.`, () => this.plugin.updateEditorExtensions());
 
         // Suggest
 
@@ -451,7 +447,7 @@ export class ExtraSettingsHelper extends SettingsHelper<ExtraSettings> {
 
 
 // export class ProjectSettingsHelper {
-//     plugin: LatexReferencer;
+//     plugin: CrossLinksPlugin;
 //     file: TAbstractFile;
 
 //     constructor(public contentEl: HTMLElement, public parent: ContextSettingModal) {
@@ -540,6 +536,6 @@ function addFoldOptionSetting(el: HTMLElement, name: string, onChange: (fold: Fo
 
             dropdown.setValue(defaultValue ?? DEFAULT_EXTRA_SETTINGS.foldDefault);
 
-            dropdown.onChange(onChange)
+            dropdown.onChange((value) => onChange(value as FoldOption))
         });
 }

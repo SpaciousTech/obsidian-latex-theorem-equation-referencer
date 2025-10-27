@@ -1,6 +1,6 @@
 import { TAbstractFile, TFile, App, Modal, Setting, FuzzySuggestModal, TFolder, Component } from 'obsidian';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { MathSettings, MathContextSettings, DEFAULT_SETTINGS, MinimalTheoremCalloutSettings } from 'settings/settings';
 import { MathSettingTab } from "settings/tab";
 import { TheoremCalloutSettingsHelper, MathContextSettingsHelper } from "settings/helper";
@@ -9,11 +9,11 @@ import { resolveSettings } from 'utils/plugin';
 
 
 abstract class MathSettingModal<SettingsType> extends Modal {
-    settings: SettingsType;
+    settings!: SettingsType;
 
     constructor(
         app: App,
-        public plugin: LatexReferencer,
+        public plugin: CrossLinksPlugin,
         public callback?: (settings: SettingsType) => void,
     ) {
         super(app);
@@ -59,11 +59,11 @@ abstract class MathSettingModal<SettingsType> extends Modal {
 
 
 export class TheoremCalloutModal extends MathSettingModal<MathSettings> {
-    defaultSettings: Required<MathContextSettings>;
+    defaultSettings!: Required<MathContextSettings>;
 
     constructor(
         app: App,
-        plugin: LatexReferencer,
+        plugin: CrossLinksPlugin,
         public file: TFile,
         callback: (settings: MathSettings) => void,
         public buttonText: string,
@@ -123,7 +123,7 @@ export class ContextSettingModal extends MathSettingModal<MathContextSettings> {
 
     constructor(
         app: App,
-        plugin: LatexReferencer,
+        plugin: CrossLinksPlugin,
         public file: TAbstractFile,
         callback?: (settings: MathContextSettings) => void,
         public parent?: TheoremCalloutModal | undefined
@@ -151,7 +151,7 @@ export class ContextSettingModal extends MathSettingModal<MathContextSettings> {
 
         const defaultSettings = this.file.parent ? resolveSettings(undefined, this.plugin, this.file.parent) : DEFAULT_SETTINGS;
 
-        const contextSettingsHelper = new MathContextSettingsHelper(contentEl, this.plugin.settings[this.file.path], defaultSettings, this.plugin, this.file);
+        const contextSettingsHelper = new MathContextSettingsHelper(contentEl, this.plugin.settings[this.file.path] ?? {}, defaultSettings, this.plugin, this.file);
         this.component.addChild(contextSettingsHelper);
 
         // if (!(this.file instanceof TFolder && this.file.isRoot())) {
@@ -178,7 +178,7 @@ export class ContextSettingModal extends MathSettingModal<MathContextSettings> {
 
 abstract class FileSuggestModal extends FuzzySuggestModal<TAbstractFile> {
 
-    constructor(app: App, public plugin: LatexReferencer) {
+    constructor(app: App, public plugin: CrossLinksPlugin) {
         super(app);
     }
 
@@ -212,7 +212,7 @@ abstract class FileSuggestModal extends FuzzySuggestModal<TAbstractFile> {
 
 
 export class LocalContextSettingsSuggestModal extends FileSuggestModal {
-    constructor(app: App, plugin: LatexReferencer, public settingTab: MathSettingTab) {
+    constructor(app: App, plugin: CrossLinksPlugin, public settingTab: MathSettingTab) {
         super(app, plugin);
     }
 
@@ -225,7 +225,7 @@ export class LocalContextSettingsSuggestModal extends FileSuggestModal {
 
 
 export class FileExcludeSuggestModal extends FileSuggestModal {
-    constructor(app: App, plugin: LatexReferencer, public manageModal: ExcludedFileManageModal) {
+    constructor(app: App, plugin: CrossLinksPlugin, public manageModal: ExcludedFileManageModal) {
         super(app, plugin);
     }
 
@@ -246,7 +246,7 @@ export class FileExcludeSuggestModal extends FileSuggestModal {
 
 
 export class ExcludedFileManageModal extends Modal {
-    constructor(app: App, public plugin: LatexReferencer) {
+    constructor(app: App, public plugin: CrossLinksPlugin) {
         super(app);
     }
 

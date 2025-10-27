@@ -1,6 +1,6 @@
 import { ButtonComponent, DropdownComponent, Modal, Notice, Setting, TextComponent } from 'obsidian';
 
-import LatexReferencer, { VAULT_ROOT } from '../main';
+import CrossLinksPlugin, { VAULT_ROOT } from '../main';
 import { THEOREM_LIKE_ENV_IDs, TheoremLikeEnvID } from '../env';
 import { MathContextSettingsHelper } from '../settings/helper';
 import { DEFAULT_SETTINGS } from './settings';
@@ -47,6 +47,17 @@ export const DEFAULT_PROFILES: Record<string, Profile> = {
                 "conjecture": "Conjecture",
                 "hypothesis": "Hypothesis",
                 "remark": "Remark",
+                "cause": "Cause",
+                "effect": "Effect",
+                "result": "Result",
+                "observation": "Observation",
+                "conclusion": "Conclusion",
+                "evidence": "Evidence",
+                "bylaw": "Bylaw",
+                "principle": "Principle",
+                "protocol": "Protocol",
+                "context": "Context",
+                "condition": "Condition",
             },
             proof: {
                 begin: "Proof.",
@@ -76,6 +87,17 @@ export const DEFAULT_PROFILES: Record<string, Profile> = {
                 "conjecture": "予想",
                 "hypothesis": "仮説",
                 "remark": "注",
+                "cause": "原因",
+                "effect": "結果",
+                "result": "結果",
+                "observation": "観察",
+                "conclusion": "結論",
+                "evidence": "証拠",
+                "bylaw": "規則",
+                "principle": "原理",
+                "protocol": "プロトコル",
+                "context": "文脈",
+                "condition": "条件",
             },
             proof: {
                 begin: "証明.",
@@ -89,7 +111,7 @@ export const DEFAULT_PROFILES: Record<string, Profile> = {
 
 
 export class ManageProfileModal extends Modal {
-    constructor(public plugin: LatexReferencer, public helper: MathContextSettingsHelper, public profileSetting: Setting) {
+    constructor(public plugin: CrossLinksPlugin, public helper: MathContextSettingsHelper, public profileSetting: Setting) {
         super(plugin.app);
     }
 
@@ -116,19 +138,22 @@ export class ManageProfileModal extends Modal {
                         .setTooltip("Edit")
                         .setCta()
                         .onClick(() => {
-                            new EditProfileModal(
-                                this.plugin.extraSettings.profiles[id],
-                                this
-                            ).open();
+                            const profile = this.plugin.extraSettings.profiles[id];
+                            if (profile) {
+                                new EditProfileModal(profile, this).open();
+                            }
                         });
                 }).addButton((editButton) => {
                     editButton.setIcon("copy")
                         .setTooltip("Copy")
                         .onClick(() => {
-                            const copied = JSON.parse(JSON.stringify(this.plugin.extraSettings.profiles[id]));
-                            copied.id = makeIdOfCopy(id, this.plugin.extraSettings.profiles);
-                            this.plugin.extraSettings.profiles[copied.id] = copied;
-                            this.open();
+                            const profile = this.plugin.extraSettings.profiles[id];
+                            if (profile) {
+                                const copied = JSON.parse(JSON.stringify(profile));
+                                copied.id = makeIdOfCopy(id, this.plugin.extraSettings.profiles);
+                                this.plugin.extraSettings.profiles[copied.id] = copied;
+                                this.open();
+                            }
                         });
                 }).addButton((deleteButton) => {
                     deleteButton.setIcon("trash-2")
@@ -149,7 +174,7 @@ export class ManageProfileModal extends Modal {
 
         this.profileSetting.settingEl.replaceWith(
             this.helper.addProfileSetting(
-                this.plugin.settings[this.helper.file.path].profile
+                this.plugin.settings[this.helper.file.path]?.profile
             ).settingEl
         );
     }
@@ -217,6 +242,7 @@ class EditProfileModal extends Modal {
         for (let i = 0; i < PROOF_SETTING_KEYS.length; i++) {
             const key = PROOF_SETTING_KEYS[i];
             const name = prettyNames[i];
+            if (!key || !name) continue;
             this.settingRefs[key] = new Setting(contentEl).setName(name).addText((text) => {
                 text.setValue(this.profile.body.proof[key] ?? "")
                     .onChange((value) => {
@@ -228,7 +254,7 @@ class EditProfileModal extends Modal {
         // const linkedProofHeading = contentEl.createEl("h6", {text: "Linked proofs"});
         const linkedProofHeading = new Setting(contentEl)
         .setName("Linked proofs")
-        .setDesc(`For example, you can render \`${DEFAULT_SETTINGS.beginProof}\`@[[link to Theorem 1]] as "${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.linkedBeginPrefix}Theorem 1${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.linkedBeginSuffix}".`)
+        .setDesc(`For example, you can render \`${DEFAULT_SETTINGS.beginProof}\`@[[link to Theorem 1]] as "${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile]?.body.proof.linkedBeginPrefix ?? ''}Theorem 1${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile]?.body.proof.linkedBeginSuffix ?? ''}".`)
         .setHeading().settingEl;
         // const linkedProofDesc = contentEl.createDiv({ 
         //     text: `For example, you can render \`${DEFAULT_SETTINGS.beginProof}\`@[[link to Theorem 1]] as "${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.linkedBeginPrefix}Theorem 1${DEFAULT_PROFILES[DEFAULT_SETTINGS.profile].body.proof.linkedBeginSuffix}".`,
@@ -241,9 +267,11 @@ class EditProfileModal extends Modal {
     onClose() {
         const profiles = this.parent.plugin.extraSettings.profiles;
         for (const oldID in profiles) {
-            const newID = profiles[oldID].id;
+            const profile = profiles[oldID];
+            if (!profile) continue;
+            const newID = profile.id;
             if (newID != oldID) {
-                profiles[newID] = profiles[oldID];
+                profiles[newID] = profile;
                 delete profiles[oldID];
                 const affected = getAffectedFiles(this.parent.plugin, oldID);
                 updateProfile(this.parent.plugin, affected, newID);
@@ -329,12 +357,13 @@ class AddProfileModal extends Modal {
                 for (const envID of THEOREM_LIKE_ENV_IDs) {
                     newBody.theorem[envID] = "";
                 }
-                this.parent.plugin.extraSettings.profiles[id] = {
+                const newProfile = {
                     id,
                     meta: { tags: [] },
                     body: newBody
                 };
-                new EditProfileModal(this.parent.plugin.extraSettings.profiles[id], this.parent).open();
+                this.parent.plugin.extraSettings.profiles[id] = newProfile;
+                new EditProfileModal(newProfile, this.parent).open();
                 this.close();
             });
         new ButtonComponent(buttonContainerEl)
@@ -410,11 +439,11 @@ class UpdateProfileModal extends Modal {
 }
 
 
-function getAffectedFiles(plugin: LatexReferencer, oldProfileId: string) {
+function getAffectedFiles(plugin: CrossLinksPlugin, oldProfileId: string) {
     const affected: string[] = [];
     for (const path in plugin.settings) {
         const localSettings = plugin.settings[path];
-        if (localSettings.profile == oldProfileId) {
+        if (localSettings && localSettings.profile == oldProfileId) {
             affected.push(path);
         }
     }
@@ -434,9 +463,10 @@ function makeIdOfCopy(oldID: string, profiles: Record<string, Profile>) {
 }
 
 
-function updateProfile(plugin: LatexReferencer, paths: string[], newID?: string) {
+function updateProfile(plugin: CrossLinksPlugin, paths: string[], newID?: string) {
     for (const path of paths) {
         const localSettings = plugin.settings[path];
+        if (!localSettings) continue;
         if (newID) {
             localSettings.profile = newID;
         } else {

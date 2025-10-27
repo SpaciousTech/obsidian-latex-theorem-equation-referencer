@@ -1,6 +1,6 @@
 import { DataviewQuerySearchCore, QueryType, SearchRange, WholeVaultTheoremEquationSearchCore } from 'search/core';
 
-import LatexReferencer from "main";
+import CrossLinksPlugin from "main";
 import { App, EditorSuggestContext, MarkdownView, Setting, SuggestModal, TextAreaComponent } from "obsidian";
 import { MathSearchCore, SuggestParent } from "./core";
 import { MathBlock } from "index/typings/markdown";
@@ -13,7 +13,7 @@ export class MathSearchModal extends SuggestModal<MathBlock> implements SuggestP
     dvQueryField: Setting;
     topEl: HTMLElement;
 
-    constructor(public plugin: LatexReferencer) {
+    constructor(public plugin: CrossLinksPlugin) {
         super(plugin.app);
         this.app = plugin.app;
         this.core = new WholeVaultTheoremEquationSearchCore(this);
@@ -39,14 +39,14 @@ export class MathSearchModal extends SuggestModal<MathBlock> implements SuggestP
                 // recover the last state
                 dropdown.setValue(this.plugin.extraSettings.searchModalQueryType)
 
-                dropdown.onChange((value: QueryType) => {
-                    this.queryType = value;
+                dropdown.onChange((value) => {
+                    this.queryType = value as QueryType;
                     this.resetCore();
                     // @ts-ignore
                     this.onInput();
 
                     // remember the last state
-                    this.plugin.extraSettings.searchModalQueryType = value;
+                    this.plugin.extraSettings.searchModalQueryType = value as QueryType;
                     this.plugin.saveSettings();
                 })
             });
@@ -61,14 +61,14 @@ export class MathSearchModal extends SuggestModal<MathBlock> implements SuggestP
 
                 // recover the last state
                 dropdown.setValue(this.plugin.extraSettings.searchModalRange)
-                dropdown.onChange((value: SearchRange) => {
-                    this.range = value;
+                dropdown.onChange((value) => {
+                    this.range = value as SearchRange;
                     this.resetCore();
                     // @ts-ignore
                     this.onInput();
 
                     // remember the last state
-                    this.plugin.extraSettings.searchModalRange = value;
+                    this.plugin.extraSettings.searchModalRange = value as SearchRange;
                     this.plugin.saveSettings();
                 })
             });
@@ -132,8 +132,10 @@ export class MathSearchModal extends SuggestModal<MathBlock> implements SuggestP
     }
 
     getSelectedItem(): MathBlock {
-        return this.chooser.values![this.chooser.selectedItem];
-    };
+        const item = this.chooser.values![this.chooser.selectedItem];
+        if (!item) throw new Error('No item selected');
+        return item;
+    }
 
     getSuggestions(query: string) {
         return this.core.getSuggestions(query);

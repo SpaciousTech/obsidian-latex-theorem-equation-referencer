@@ -2,7 +2,7 @@ import { EquationBlock } from 'index/typings/markdown';
 import { TFile, HeadingSubpathResult, BlockSubpathResult, App } from 'obsidian';
 import * as MathLinks from 'obsidian-mathlinks';
 
-import LatexReferencer from 'main';
+import CrossLinksPlugin from 'main';
 import { MathIndex } from 'index/math-index';
 import { MarkdownPage, MathBlock, TheoremCalloutBlock } from 'index/typings/markdown';
 
@@ -11,7 +11,7 @@ export class CleverefProvider extends MathLinks.Provider {
     app: App;
     index: MathIndex;
 
-    constructor(mathLinks: any, public plugin: LatexReferencer) {
+    constructor(mathLinks: any, public plugin: CrossLinksPlugin) {
         super(mathLinks);
         this.app = plugin.app;
         this.index = plugin.indexManager.index;

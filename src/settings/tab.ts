@@ -1,7 +1,7 @@
 import { App, Component, PluginSettingTab, Setting } from "obsidian";
 
-import LatexReferencer, { VAULT_ROOT } from "../main";
-import { DEFAULT_EXTRA_SETTINGS, DEFAULT_SETTINGS } from "./settings";
+import CrossLinksPlugin, { VAULT_ROOT } from "../main";
+import { DEFAULT_EXTRA_SETTINGS, DEFAULT_SETTINGS, MathContextSettings, ExtraSettings } from "./settings";
 import { ExtraSettingsHelper, MathContextSettingsHelper } from "./helper";
 import { ExcludedFileManageModal, LocalContextSettingsSuggestModal } from "settings/modals";
 // import { PROJECT_DESCRIPTION } from "project";
@@ -9,8 +9,9 @@ import { ExcludedFileManageModal, LocalContextSettingsSuggestModal } from "setti
 
 export class MathSettingTab extends PluginSettingTab {
     component: Component;
+    private originalSettings: { settings: Record<string, Partial<MathContextSettings>>, extraSettings: ExtraSettings } | null = null;
 
-    constructor(app: App, public plugin: LatexReferencer) {
+    constructor(app: App, public plugin: CrossLinksPlugin) {
         super(app, plugin);
         this.component = new Component();
     }
@@ -20,6 +21,9 @@ export class MathSettingTab extends PluginSettingTab {
             .addButton((btn) => {
                 btn.setButtonText("Restore defaults");
                 btn.onClick(async () => {
+                    if (!this.plugin.settings[VAULT_ROOT]) {
+                        this.plugin.settings[VAULT_ROOT] = {};
+                    }
                     Object.assign(this.plugin.settings[VAULT_ROOT], DEFAULT_SETTINGS);
                     Object.assign(this.plugin.extraSettings, DEFAULT_EXTRA_SETTINGS);
                     this.display();
@@ -31,13 +35,19 @@ export class MathSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
         this.component.load();
+        
+        // Store original settings for change detection
+        this.originalSettings = {
+            settings: JSON.parse(JSON.stringify(this.plugin.settings)),
+            extraSettings: JSON.parse(JSON.stringify(this.plugin.extraSettings))
+        };
 
         containerEl.createEl("h4", { text: "Global" });
 
         const root = this.app.vault.getRoot();
         const globalHelper = new MathContextSettingsHelper(
             this.containerEl,
-            this.plugin.settings[VAULT_ROOT],
+            this.plugin.settings[VAULT_ROOT] ?? {},
             DEFAULT_SETTINGS,
             this.plugin,
             root
@@ -139,8 +149,54 @@ export class MathSettingTab extends PluginSettingTab {
     async hide() {
         super.hide();
         await this.plugin.saveSettings();
-        this.plugin.indexManager.trigger('global-settings-updated');
-        this.plugin.updateLinkAutocomplete();
+        
+        // Check if any settings have changed at all
+        if (this.originalSettings && this.hasSettingsChanged()) {
+            // Check if settings that require re-indexing have changed
+            if (this.hasReindexingSettingsChanged()) {
+                this.plugin.indexManager.trigger('global-settings-updated');
+            } else {
+                // Only trigger UI updates for non-reindexing changes
+                this.plugin.updateLinkAutocomplete();
+                this.plugin.forceRerender();
+            }
+        }
+        
         this.component.unload();
+    }
+    
+    /**
+     * Check if any settings have changed at all
+     */
+    private hasSettingsChanged(): boolean {
+        if (!this.originalSettings) return false;
+        
+        // Check if any settings have changed
+        const settingsChanged = JSON.stringify(this.originalSettings.settings) !== JSON.stringify(this.plugin.settings);
+        const extraSettingsChanged = JSON.stringify(this.originalSettings.extraSettings) !== JSON.stringify(this.plugin.extraSettings);
+        
+        return settingsChanged || extraSettingsChanged;
+    }
+    
+    /**
+     * Check if any settings that require full re-indexing have changed
+     */
+    private hasReindexingSettingsChanged(): boolean {
+        if (!this.originalSettings) return false;
+        
+        // Settings that require re-indexing (affect parsing)
+        const reindexingKeys: (keyof ExtraSettings)[] = [
+            'excludeExampleCallout',
+            'importerNumThreads', 
+            'importerUtilization'
+        ];
+        
+        for (const key of reindexingKeys) {
+            if (this.originalSettings.extraSettings[key] !== this.plugin.extraSettings[key]) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 }
