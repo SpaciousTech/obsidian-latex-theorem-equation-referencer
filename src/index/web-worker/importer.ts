@@ -207,15 +207,22 @@ export class MathImporter extends Component {
 
     /** Reject all outstanding promises and close all workers on close. */
     public onunload(): void {
+        this.shutdown = true;
+        
+        // Terminate all workers and clean up their resources
         for (let worker of this.workers.values()) {
             terminate(worker);
         }
+        this.workers.clear();
 
+        // Reject all queued promises
         for (let [_file, _success, reject] of this.queue) {
-            reject("Terminated");
+            reject("Importer terminated");
         }
+        this.queue = [];
 
-        this.shutdown = true;
+        // Clear outstanding promises
+        this.outstanding.clear();
     }
 }
 

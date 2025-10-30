@@ -7,6 +7,7 @@ import { rewriteTheoremCalloutFromV1ToV2 } from "utils/plugin";
 
 export class MigrationModal extends Modal {
     component: Component;
+    private timers: number[] = [];
 
     constructor(public plugin: CrossLinksPlugin) {
         super(plugin.app);
@@ -75,6 +76,7 @@ to the new format:
                         resolve();
                     }
                 }, 3 * 10);
+                this.timers.push(timer);
             })
         });
         waitForCacheRefresh.setName('Preparing the fresh cache... Done!');
@@ -108,6 +110,12 @@ to the new format:
     onClose() {
         this.contentEl.empty();
         this.component.unload();
+        
+        // Clean up any remaining timers to prevent memory leaks
+        for (const timer of this.timers) {
+            window.clearInterval(timer);
+        }
+        this.timers = [];
     }
 
 }
