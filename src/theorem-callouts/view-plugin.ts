@@ -10,7 +10,7 @@ export const createTheoremCalloutNumberingViewPlugin = (plugin: CrossLinksPlugin
         private updateTimer: number | null = null;
 
         constructor(public view: EditorView) {
-            // Wait until the initial rendering is done so that we can find the callout elements using qeurySelectorAll(). 
+            // Wait until the initial rendering is done so that we can find the callout elements using querySelectorAll(). 
             this.updateTimer = window.setTimeout(() => this._update(view));
         }
 
