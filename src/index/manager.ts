@@ -415,6 +415,13 @@ export class MathIndexInitializer extends Component {
     onunload() {
         if (this.active) {
             this.active = false;
+            
+            // Clear the queue to prevent further processing
+            this.queue = [];
+            
+            // Clear current tasks
+            this.current = [];
+            
             this.done.reject("Initialization was cancelled before completing.");
         }
     }

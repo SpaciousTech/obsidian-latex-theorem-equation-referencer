@@ -77,6 +77,7 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
     /** Set to the linktext when this theorem callout is inside an embed or a hover page preview. */
     linktext: string | null = null;
     editButton: HTMLElement | null = null;
+    private updateTimers: number[] = [];
 
     constructor(
         containerEl: HTMLElement,
@@ -118,11 +119,19 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
         
         // Ensure cleanup on unload
         this.register(() => {
+            this.clearTimers();
             this.removeEditButton();
             if (this.observer) {
                 this.observer.unload();
             }
         });
+    }
+
+    private clearTimers() {
+        for (const timer of this.updateTimers) {
+            window.clearTimeout(timer);
+        }
+        this.updateTimers = [];
     }
 
     getPage(): MarkdownPage | null {
@@ -180,7 +189,7 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
         // In embeds or hover popover, we can get an incorrect TheoremCalloutBlock because 
         // MarkdownPostProcessorContext.getSectionInfo() returns incorrect line numbers.
         // So we have to correct it manually.
-        setTimeout(() => {
+        const timer = window.setTimeout(() => {
             // hover editor has no problem with line numbers, so there is no job to do!
             if (this.containerEl.closest('.hover-popover.hover-editor')) return;
 
@@ -191,6 +200,7 @@ class TheoremCalloutRenderer extends MarkdownRenderChild {
             }
 
         });
+        this.updateTimers.push(timer);
     }
 
     correctEmbedOrHoverPagePreview(block: (TheoremCalloutInfo & { blockId?: string }) | null, info: TheoremCalloutInfo) {

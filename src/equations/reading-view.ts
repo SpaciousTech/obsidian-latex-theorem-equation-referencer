@@ -68,6 +68,7 @@ function preprocessForPdfExport(plugin: CrossLinksPlugin, el: HTMLElement, ctx: 
 export class EquationNumberRenderer extends MarkdownRenderChild {
     app: App
     index: MathIndex;
+    private updateTimers: number[] = [];
 
     constructor(containerEl: HTMLElement, public plugin: CrossLinksPlugin, public file: TFile, public context: MarkdownPostProcessorContext) {
         // containerEl, currentEL are mjx-container.MathJax elements
@@ -76,13 +77,15 @@ export class EquationNumberRenderer extends MarkdownRenderChild {
         this.index = this.plugin.indexManager.index;
 
         this.registerEvent(this.plugin.indexManager.on("index-initialized", () => {
-            setTimeout(() => this.update());
+            const timer = window.setTimeout(() => this.update());
+            this.updateTimers.push(timer);
         }));
     
         this.registerEvent(this.plugin.indexManager.on("index-updated", (file) => {
-            setTimeout(() => {
+            const timer = window.setTimeout(() => {
                 if (file.path === this.file.path) this.update();
             });
+            this.updateTimers.push(timer);
         }));
     }
 
@@ -99,10 +102,17 @@ export class EquationNumberRenderer extends MarkdownRenderChild {
     }
 
     async onload() {
-        setTimeout(() => this.update());
+        const timer = window.setTimeout(() => this.update());
+        this.updateTimers.push(timer);
     }
 
     onunload() {
+        // Clear any pending timers to prevent memory leaks
+        for (const timer of this.updateTimers) {
+            window.clearTimeout(timer);
+        }
+        this.updateTimers = [];
+        
         // I don't know if this is really necessary, but just in case...
         finishRenderMath();
     }
